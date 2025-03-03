@@ -1,0 +1,6 @@
+#flutter_native_splash:
+  #color: "#ffffff"  # Set to white for light theme or black for dark theme
+  #image: assets/images/splash_logo.png  # Provide your splash logo image
+  #android: true
+  #ios: true
+  #web: true

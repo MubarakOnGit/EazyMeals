@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "593651044753",
+    "project_id": "eazymeals-86f8e",
+    "storage_bucket": "eazymeals-86f8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:593651044753:android:64842a1e566e6380eaca30",
+        "android_client_info": {
+          "package_name": "com.example.eazy_meals"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "593651044753-g21t0j14p1kkuvbu1hvusg0iq5ieqo02.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBD1zqk5TPQ4HbpPwX1F70qJlTgfUFN6to"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "593651044753-g21t0j14p1kkuvbu1hvusg0iq5ieqo02.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

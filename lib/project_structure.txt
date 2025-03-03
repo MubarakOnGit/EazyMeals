@@ -1,0 +1,19 @@
+lib/
+│
+├── main.dart                 # Entry point of the app
+│
+├── screens/                  # All screens go here
+│   ├── splash_screen.dart    # Splash screen
+│   ├── onboarding_screen.dart # Onboarding screens
+│   ├── login_screen.dart     # Login screen
+│   └── ...                   # Other screens
+│
+├── utils/                    # Utility files
+│   ├── constants.dart        # Constants like colors, strings, etc.
+│   ├── theme.dart            # Theme configuration
+│   └── image_to_string.dart  # Image path utility
+│
+├── widgets/                  # Reusable widgets
+│   └── onboarding_widget.dart # Onboarding widget
+│
+└── models/                   # Data models (if needed later)
