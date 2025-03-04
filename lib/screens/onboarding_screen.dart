@@ -65,6 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.ease,
       );
     } else {
+      // Navigate to login screen when last page is reached
       Navigator.pushReplacementNamed(context, '/login');
     }
   }

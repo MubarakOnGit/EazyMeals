@@ -29,6 +29,13 @@
             {
               "client_id": "593651044753-g21t0j14p1kkuvbu1hvusg0iq5ieqo02.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "593651044753-tf1gn040cjeam8arbn3ihtt1sg4alnfc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.eazyMeals"
+              }
             }
           ]
         }

@@ -20,30 +20,31 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_AUTH_DOMAIN',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    measurementId: 'YOUR_MEASUREMENT_ID',
+    apiKey: 'AIzaSyB3Y8yNosO1G5JqTi1KiOb4_OhGAtkCZBQ',
+    appId: '1:593651044753:web:4ec8a0a463fa8cdeeaca30',
+    messagingSenderId: '593651044753',
+    projectId: 'eazymeals-86f8e',
+    authDomain: 'eazymeals-86f8e.firebaseapp.com',
+    storageBucket: 'eazymeals-86f8e.firebasestorage.app',
+    measurementId: 'G-LPTLBL62CN',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
-    appId: 'YOUR_ANDROID_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
+    apiKey: 'AIzaSyBD1zqk5TPQ4HbpPwX1F70qJlTgfUFN6to',
+    appId: '1:593651044753:android:64842a1e566e6380eaca30',
+    messagingSenderId: '593651044753',
+    projectId: 'eazymeals-86f8e',
+    storageBucket: 'eazymeals-86f8e.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    iosClientId: 'YOUR_IOS_CLIENT_ID',
+    apiKey: 'AIzaSyC2VSlaRuKs3c35xPxe0juMzF_1JQKzrvI',
+    appId: '1:593651044753:ios:291c23c283f552b1eaca30',
+    messagingSenderId: '593651044753',
+    projectId: 'eazymeals-86f8e',
+    storageBucket: 'eazymeals-86f8e.firebasestorage.app',
+    iosClientId: '593651044753-tf1gn040cjeam8arbn3ihtt1sg4alnfc.apps.googleusercontent.com',
     iosBundleId: 'com.example.eazyMeals',
   );
+
 }

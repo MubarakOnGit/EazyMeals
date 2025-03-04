@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-
-import 'onboarding_screen.dart';
+import '../widgets/GlassSnackBar.dart';
+import 'VerificationScreen.dart';
+import 'forgot_password_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -19,12 +21,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
+  // Add the missing Google Sign-In method
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
+    showGlassSnackBar(
+      context: context,
+      title: 'Signing In',
+      message: 'Connecting with Google...',
+      type: 'loading',
+    );
 
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return;
+      if (googleUser == null) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        return;
+      }
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -39,15 +51,103 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (userCredential.user != null) {
-        // Navigate to the home screen or perform other actions
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        showGlassSnackBar(
+          context: context,
+          title: 'Welcome!',
+          message: 'Google Sign-In successful',
+          type: 'success',
+        );
         Navigator.pushReplacementNamed(context, '/home');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to sign in with Google: $e')),
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      showGlassSnackBar(
+        context: context,
+        title: 'Google Sign-In Failed',
+        message: 'Error connecting to Google',
+        type: 'error',
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // Update the _signInWithEmailAndPassword method
+  Future<void> _signInWithEmailAndPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    showGlassSnackBar(
+      context: context,
+      title: 'Signing In',
+      message: 'Authenticating your credentials',
+      type: 'loading',
+    );
+
+    try {
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+
+      // Check if email is verified
+      if (!userCredential.user!.emailVerified) {
+        await _handleUnverifiedUser(userCredential.user!);
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      showGlassSnackBar(
+        context: context,
+        title: 'Welcome Back!',
+        message: 'Successfully logged in',
+        type: 'success',
+      );
+
+      Navigator.pushReplacementNamed(context, '/home');
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      String message = e.message ?? 'Invalid email or password';
+
+      if (e.code == 'user-not-found') {
+        message = 'No account found for this email';
+      } else if (e.code == 'wrong-password') {
+        message = 'Incorrect password';
+      }
+
+      showGlassSnackBar(
+        context: context,
+        title: 'Login Failed',
+        message: message,
+        type: 'error',
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Add this new method
+  Future<void> _handleUnverifiedUser(User user) async {
+    try {
+      await user.reload();
+      final updatedUser = _auth.currentUser;
+
+      if (updatedUser != null && !updatedUser.emailVerified) {
+        await updatedUser.sendEmailVerification();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => VerificationScreen()),
+        );
+      }
+    } catch (e) {
+      showGlassSnackBar(
+        context: context,
+        title: 'Verification Error',
+        message: 'Failed to resend verification email',
+        type: 'error',
+      );
     }
   }
 
@@ -68,106 +168,59 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
           ),
         ),
-        child: Stack(
-          children: [
-            // Top Wave Design
-            Positioned(
-              top: 0,
-              child: ClipPath(
-                clipper: TopWaveClipper(),
-                child: Container(
-                  width: MediaQuery.of(context).size.width,
-                  height: 150,
-                  color:
-                      isDark
-                          ? Colors.blue.withAlpha(
-                            26,
-                          ) // Equivalent to 0.1 opacity
-                          : Colors.blue.withAlpha(
-                            51,
-                          ), // Equivalent to 0.2 opacity,
-                ),
-              ),
-            ),
-
-            // Main Content
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Welcome Back!',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.onSurface,
-                      letterSpacing: 0.5,
-                    ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Welcome Back!',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                    letterSpacing: 0.5,
                   ),
-                  SizedBox(height: 40),
-
-                  // Login Form
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        _buildEmailField(theme),
-                        SizedBox(height: 20),
-                        _buildPasswordField(theme),
-                        SizedBox(height: 15),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {},
-                            child: Text(
-                              'Forgot Password?',
-                              style: TextStyle(
-                                color: theme.colorScheme.primary,
+                ),
+                SizedBox(height: 40),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      _buildEmailField(theme),
+                      SizedBox(height: 20),
+                      _buildPasswordField(theme),
+                      SizedBox(height: 15),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ForgotPasswordScreen(),
                               ),
-                            ),
+                            );
+                          },
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(color: theme.colorScheme.primary),
                           ),
                         ),
-                        SizedBox(height: 30),
-                        _buildLoginButton(theme),
-                        SizedBox(height: 25),
-                        _buildGoogleSignInButton(theme, isDark),
-                        SizedBox(height: 25),
-                        _buildSignupPrompt(theme),
-                      ],
-                    ),
+                      ),
+                      SizedBox(height: 30),
+                      _buildLoginButton(theme),
+                      SizedBox(height: 25),
+                      _buildGoogleSignInButton(theme, isDark),
+                      SizedBox(height: 25),
+                      _buildSignupPrompt(theme),
+                    ],
                   ),
-                ],
-              ),
-            ),
-
-            // Bottom Wave Design
-            Positioned(
-              bottom: 0,
-              child: ClipPath(
-                clipper: BottomWaveClipper(),
-                child: Container(
-                  width: MediaQuery.of(context).size.width,
-                  height: 100,
-                  color:
-                      isDark
-                          ? Colors.blue.withAlpha(
-                            26,
-                          ) // Equivalent to 0.1 opacity
-                          : Colors.blue.withAlpha(
-                            51,
-                          ), // Equivalent to 0.2 opacity
                 ),
-              ),
+              ],
             ),
-
-            // Loading Indicator
-            if (_isLoading)
-              Container(
-                color: Colors.black.withAlpha(128), // 0.5 * 255 = 127.5 ≈ 128
-                child: Center(child: CircularProgressIndicator()),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -221,19 +274,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLoginButton(ThemeData theme) {
     return ElevatedButton(
-      onPressed: () {
-        if (_formKey.currentState!.validate()) {
-          // Handle login
-        }
-      },
+      onPressed: _isLoading ? null : _signInWithEmailAndPassword,
       style: ElevatedButton.styleFrom(
         backgroundColor: theme.colorScheme.primary,
         padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        elevation: 5,
-        shadowColor: theme.colorScheme.primary.withAlpha(
-          77,
-        ), // 0.3 * 255 = 76.5 ≈ 77
       ),
       child: Text(
         'Login',
@@ -258,10 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset(
-            'assets/google_logo.png', // Add Google logo asset
-            height: 24,
-          ),
+          Image.asset('assets/images/google.png', height: 24),
           SizedBox(width: 10),
           Text(
             'Sign in with Google',
@@ -286,7 +328,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         TextButton(
           onPressed: () {
-            // Navigate to signup screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => SignUpScreen()),
+            );
           },
           child: Text(
             'Sign Up',
@@ -300,5 +345,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
-// Keep the TopWaveClipper and BottomWaveClipper classes from previous code
