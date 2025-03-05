@@ -107,7 +107,7 @@ class _StudentVerificationSurveyState extends State<StudentVerificationSurvey> {
                                 final message =
                                     'Hello, my registered email is: ${user.email}. Here is my university ID for verification.';
                                 final url = Uri.parse(
-                                  'https://wa.me/YOUR_WHATSAPP_NUMBER?text=${Uri.encodeComponent(message)}',
+                                  'https://wa.me/+917034290370?text=${Uri.encodeComponent(message)}',
                                 );
 
                                 if (await canLaunchUrl(url)) {

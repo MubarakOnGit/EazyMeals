@@ -1,3 +1,4 @@
+// lib/menu_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,7 +26,7 @@ class _MenuScreenState extends State<MenuScreen> {
   bool _isPaused = false;
   int _remainingSeconds = 0;
   Timer? _timer;
-  DateTime? _pauseStartTime; // Track when pause begins
+  DateTime? _pauseStartTime;
 
   @override
   void initState() {
@@ -34,6 +35,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _fetchMenus();
     _fetchUserData();
     _scheduleDailyUpdate();
+    _schedulePauseCheck();
   }
 
   @override
@@ -84,14 +86,16 @@ class _MenuScreenState extends State<MenuScreen> {
                     ? (doc['subscriptionEndDate'] as Timestamp).toDate()
                     : null;
             _isPaused = doc['isPaused'] ?? false;
+            _pauseStartTime =
+                doc['pausedAt'] != null
+                    ? (doc['pausedAt'] as Timestamp).toDate()
+                    : null;
 
             if (_activeSubscription && _subscriptionEndDate != null) {
               _remainingSeconds =
                   _subscriptionEndDate!.difference(_currentDate).inSeconds;
               if (_remainingSeconds > 0 && !_isPaused) {
                 _startTimer();
-              } else if (_remainingSeconds <= 0) {
-                _deactivateSubscription();
               }
             }
           });
@@ -130,6 +134,7 @@ class _MenuScreenState extends State<MenuScreen> {
         'subscriptionStartDate': FieldValue.delete(),
         'subscriptionEndDate': FieldValue.delete(),
         'isPaused': FieldValue.delete(),
+        'pausedAt': FieldValue.delete(),
       });
     }
   }
@@ -153,10 +158,67 @@ class _MenuScreenState extends State<MenuScreen> {
     });
   }
 
+  void _schedulePauseCheck() {
+    final now = DateTime.now();
+    var next930PM = DateTime(now.year, now.month, now.day, 21, 30); // 9:30 PM
+    if (now.isAfter(next930PM)) {
+      next930PM = next930PM.add(Duration(days: 1));
+    }
+    final duration = next930PM.difference(now);
+
+    Timer(duration, () async {
+      User? user = _auth.currentUser;
+      if (user != null) {
+        DocumentSnapshot doc =
+            await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists &&
+            doc['activeSubscription'] == true &&
+            doc['isPaused'] == true) {
+          DateTime tomorrow = now.add(Duration(days: 1));
+          DateTime tomorrowStart = DateTime(
+            tomorrow.year,
+            tomorrow.month,
+            tomorrow.day,
+            0,
+            0,
+          );
+          DateTime tomorrowEnd = DateTime(
+            tomorrow.year,
+            tomorrow.month,
+            tomorrow.day,
+            23,
+            59,
+            59,
+          );
+
+          QuerySnapshot orders =
+              await _firestore
+                  .collection('orders')
+                  .where('userId', isEqualTo: user.uid)
+                  .where(
+                    'date',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
+                  )
+                  .where(
+                    'date',
+                    isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd),
+                  )
+                  .get();
+
+          for (var order in orders.docs) {
+            await order.reference.update({'status': 'Paused'});
+            print('Confirmed pause for tomorrow\'s order for ${user.uid}');
+          }
+        }
+      }
+      _schedulePauseCheck();
+    });
+  }
+
   bool _canPauseOrPlay() {
     final now = DateTime.now();
     final hour = now.hour;
-    return !(hour >= 21 || hour < 9);
+    return !(hour >= 21 || hour < 9); // Allow between 9 AM and 9 PM
   }
 
   void _togglePausePlay() async {
@@ -166,7 +228,8 @@ class _MenuScreenState extends State<MenuScreen> {
         _isPaused = !_isPaused;
         if (_isPaused) {
           _timer?.cancel();
-          _pauseStartTime = DateTime.now(); // Record pause start time
+          _pauseStartTime = DateTime.now();
+          _markNextDayPaused(user.uid);
         } else if (_pauseStartTime != null) {
           final pausedDuration =
               DateTime.now().difference(_pauseStartTime!).inSeconds;
@@ -174,15 +237,18 @@ class _MenuScreenState extends State<MenuScreen> {
             Duration(seconds: pausedDuration),
           );
           _remainingSeconds += pausedDuration;
-          _pauseStartTime = null; // Reset pause start time
+          _pauseStartTime = null;
           _startTimer();
+          _resumeNextDay(user.uid);
         }
       });
       try {
         await _firestore.collection('users').doc(user.uid).update({
           'isPaused': _isPaused,
+          'pausedAt': _isPaused ? Timestamp.now() : FieldValue.delete(),
           'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
         });
+        print(_isPaused ? 'Subscription paused' : 'Subscription resumed');
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to update pause status: $e')),
@@ -191,8 +257,83 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
+  void _markNextDayPaused(String userId) async {
+    final now = DateTime.now();
+    final tomorrow = now.add(Duration(days: 1));
+    final tomorrowStart = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      0,
+      0,
+    );
+    final tomorrowEnd = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      23,
+      59,
+      59,
+    );
+
+    QuerySnapshot orders =
+        await _firestore
+            .collection('orders')
+            .where('userId', isEqualTo: userId)
+            .where('status', isEqualTo: 'Pending Delivery')
+            .where(
+              'date',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
+            )
+            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
+            .get();
+
+    for (var order in orders.docs) {
+      await order.reference.update({'status': 'Paused'});
+      print('Marked next day\'s order as Paused for $userId');
+    }
+  }
+
+  void _resumeNextDay(String userId) async {
+    final now = DateTime.now();
+    final tomorrow = now.add(Duration(days: 1));
+    final tomorrowStart = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      0,
+      0,
+    );
+    final tomorrowEnd = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      23,
+      59,
+      59,
+    );
+
+    QuerySnapshot orders =
+        await _firestore
+            .collection('orders')
+            .where('userId', isEqualTo: userId)
+            .where('status', isEqualTo: 'Paused')
+            .where(
+              'date',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
+            )
+            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
+            .get();
+
+    for (var order in orders.docs) {
+      await order.reference.update({'status': 'Pending Delivery'});
+      print('Resumed next day\'s order for $userId');
+    }
+  }
+
   String _formatRemainingTime() {
-    final duration = Duration(seconds: _remainingSeconds);
+    if (_subscriptionEndDate == null) return 'N/A';
+    final duration = _subscriptionEndDate!.difference(_currentDate);
     final days = duration.inDays;
     final weeks = (days / 7).floor();
     final remainingDays = days % 7;
@@ -315,7 +456,6 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  // Remaining methods (_buildTimeline, _buildDayItem, _buildMealItem) unchanged for brevity
   Widget _buildTimeline() {
     final daysOfWeek = [
       'Monday',
@@ -330,7 +470,6 @@ class _MenuScreenState extends State<MenuScreen> {
     final allDays = List.generate(35, (index) {
       final dayOffset = index - 7;
       final date = _currentDate.add(Duration(days: dayOffset));
-      print('Day $index: $date');
       return date;
     });
 
@@ -382,6 +521,10 @@ class _MenuScreenState extends State<MenuScreen> {
         date.day == _currentDate.day &&
         date.month == _currentDate.month &&
         date.year == _currentDate.year;
+    final isNextDay =
+        date.day == _currentDate.add(Duration(days: 1)).day &&
+        date.month == _currentDate.add(Duration(days: 1)).month &&
+        date.year == _currentDate.add(Duration(days: 1)).year;
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 8),
@@ -390,14 +533,21 @@ class _MenuScreenState extends State<MenuScreen> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(
-              '$day\n${date.day}/${date.month}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: isCurrentDay ? Colors.green : Colors.black87,
-              ),
-              textAlign: TextAlign.center,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(
+                  '$day\n${date.day}/${date.month}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isCurrentDay ? Colors.green : Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (isNextDay && _isPaused)
+                  Icon(Icons.pause, color: Colors.red, size: 20),
+              ],
             ),
           ),
           SizedBox(width: 8),

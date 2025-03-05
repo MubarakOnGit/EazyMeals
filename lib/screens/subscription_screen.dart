@@ -102,7 +102,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final message =
         'Subscription Request\nEmail: $email\nCategory: $_selectedCategory\nMeal Type: $_selectedMealType\nPlan: $_selectedPlan\nAmount: ₹$_price';
     final whatsappUrl =
-        'https://wa.me/+1234567890?text=${Uri.encodeComponent(message)}'; // Replace with admin number
+        'https://wa.me/+917034290370?text=${Uri.encodeComponent(message)}'; // Replace with admin number
 
     try {
       await launchUrl(Uri.parse(whatsappUrl));
