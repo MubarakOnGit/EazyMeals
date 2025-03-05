@@ -10,7 +10,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _formKey = GlobalKey<FormState>();
 
-  // Form fields
+  // Form fields for menu
   int _weekNumber = 1;
   String _category = 'Veg';
   final List<Map<String, String>> _items = [];
@@ -18,7 +18,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _imageUrlController = TextEditingController();
   String _mealType = 'Lunch';
-  String _day = 'Monday'; // Default day
+  String _day = 'Monday';
 
   final List<String> _daysOfWeek = [
     'Monday',
@@ -29,6 +29,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
     'Saturday',
     'Sunday',
   ];
+  final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
+  final List<String> _plans = ['1 Week', '3 Weeks', '4 Weeks'];
 
   @override
   Widget build(BuildContext context) {
@@ -52,14 +54,55 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   return CircularProgressIndicator();
                 }
                 final clients = snapshot.data!.docs;
-                return Column(
-                  children:
-                      clients.map((client) {
-                        return ListTile(
-                          title: Text(client['name']),
-                          subtitle: Text(client['email']),
-                        );
-                      }).toList(),
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemCount: clients.length,
+                  itemBuilder: (context, index) {
+                    final client = clients[index];
+                    final data = client.data() as Map<String, dynamic>;
+                    final isActive = data['activeSubscription'] ?? false;
+                    final isPaused = data['isPaused'] ?? false;
+                    final endDate =
+                        data['subscriptionEndDate'] != null
+                            ? (data['subscriptionEndDate'] as Timestamp)
+                                .toDate()
+                            : null;
+                    final remainingTime =
+                        endDate != null
+                            ? endDate.difference(DateTime.now())
+                            : Duration.zero;
+                    final remainingDays = remainingTime.inDays;
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(data['name'] ?? 'Unknown'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Email: ${data['email'] ?? 'N/A'}'),
+                            Text('Address: ${data['activeAddress'] ?? 'N/A'}'),
+                            Text('Paused: ${isPaused ? 'Yes' : 'No'}'),
+                            Text(
+                              'Timer: ${remainingDays > 0 ? '$remainingDays days' : 'Expired or Not Active'}',
+                            ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed:
+                              () =>
+                                  isActive
+                                      ? _deactivateSubscription(client.id)
+                                      : _activateSubscription(client.id),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                isActive ? Colors.red : Colors.green,
+                          ),
+                          child: Text(isActive ? 'Deactivate' : 'Activate'),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -75,7 +118,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
               key: _formKey,
               child: Column(
                 children: [
-                  // Week Number
                   TextFormField(
                     decoration: InputDecoration(labelText: 'Week Number'),
                     keyboardType: TextInputType.number,
@@ -90,13 +132,11 @@ class _ManagerScreenState extends State<ManagerScreen> {
                     },
                   ),
                   SizedBox(height: 20),
-
-                  // Category Dropdown
                   DropdownButtonFormField<String>(
                     value: _category,
                     decoration: InputDecoration(labelText: 'Category'),
                     items:
-                        ['Veg', 'South Indian', 'North Indian']
+                        _categories
                             .map(
                               (category) => DropdownMenuItem(
                                 value: category,
@@ -109,8 +149,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
                     },
                   ),
                   SizedBox(height: 20),
-
-                  // Add Items
                   TextFormField(
                     controller: _itemController,
                     decoration: InputDecoration(labelText: 'Item Name'),
@@ -172,8 +210,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
                   SizedBox(height: 10),
                   ElevatedButton(onPressed: _addItem, child: Text('Add Item')),
                   SizedBox(height: 20),
-
-                  // Display Added Items
                   Text(
                     'Added Items',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -194,8 +230,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
                             }).toList(),
                       ),
                   SizedBox(height: 20),
-
-                  // Submit Button
                   ElevatedButton(
                     onPressed: _submitMenu,
                     child: Text('Submit Menu'),
@@ -217,7 +251,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
           'description': _descriptionController.text,
           'imageUrl': _imageUrlController.text,
           'mealType': _mealType,
-          'day': _day, // Add the day field
+          'day': _day,
         });
         _itemController.clear();
         _descriptionController.clear();
@@ -241,7 +275,6 @@ class _ManagerScreenState extends State<ManagerScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Menu added successfully!')));
 
-        // Clear the form
         setState(() {
           _weekNumber = 1;
           _category = 'Veg';
@@ -257,5 +290,118 @@ class _ManagerScreenState extends State<ManagerScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Please add at least one item')));
     }
+  }
+
+  void _activateSubscription(String userId) {
+    String? selectedCategory;
+    String? selectedPlan;
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Activate Subscription'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: InputDecoration(labelText: 'Category'),
+                  items:
+                      _categories
+                          .map(
+                            (cat) =>
+                                DropdownMenuItem(value: cat, child: Text(cat)),
+                          )
+                          .toList(),
+                  onChanged: (value) => selectedCategory = value,
+                ),
+                DropdownButtonFormField<String>(
+                  decoration: InputDecoration(labelText: 'Plan'),
+                  items:
+                      _plans
+                          .map(
+                            (plan) => DropdownMenuItem(
+                              value: plan,
+                              child: Text(plan),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (value) => selectedPlan = value,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedCategory != null && selectedPlan != null) {
+                    final now = DateTime.now();
+                    final endDate = now.add(
+                      Duration(
+                        days:
+                            selectedPlan == '1 Week'
+                                ? 7
+                                : selectedPlan == '3 Weeks'
+                                ? 21
+                                : 28,
+                      ),
+                    );
+                    await _firestore.collection('users').doc(userId).update({
+                      'activeSubscription': true,
+                      'subscriptionPlan': selectedPlan,
+                      'category': selectedCategory,
+                      'subscriptionStartDate': Timestamp.fromDate(now),
+                      'subscriptionEndDate': Timestamp.fromDate(endDate),
+                      'isPaused': false,
+                    });
+                    Navigator.pop(context);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Please select category and plan'),
+                      ),
+                    );
+                  }
+                },
+                child: Text('Activate'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _deactivateSubscription(String userId) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Confirm Deactivation'),
+            content: Text(
+              'Are you sure you want to deactivate this subscription?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await _firestore.collection('users').doc(userId).update({
+                    'activeSubscription': false,
+                    'subscriptionPlan': FieldValue.delete(),
+                    'subscriptionStartDate': FieldValue.delete(),
+                    'subscriptionEndDate': FieldValue.delete(),
+                    'isPaused': FieldValue.delete(),
+                  });
+                  Navigator.pop(context);
+                },
+                child: Text('Deactivate'),
+              ),
+            ],
+          ),
+    );
   }
 }

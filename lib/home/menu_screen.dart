@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flip_card/flip_card.dart';
+import 'dart:async';
 
 import '../screens/subscription_screen.dart';
 
@@ -22,8 +23,9 @@ class _MenuScreenState extends State<MenuScreen> {
   DateTime? _subscriptionStartDate;
   DateTime? _subscriptionEndDate;
   bool _isPaused = false;
-  int _pausedDays = 0;
-  bool _isStudentVerified = false;
+  int _remainingSeconds = 0;
+  Timer? _timer;
+  DateTime? _pauseStartTime; // Track when pause begins
 
   @override
   void initState() {
@@ -32,6 +34,12 @@ class _MenuScreenState extends State<MenuScreen> {
     _fetchMenus();
     _fetchUserData();
     _scheduleDailyUpdate();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchMenus() async {
@@ -76,28 +84,53 @@ class _MenuScreenState extends State<MenuScreen> {
                     ? (doc['subscriptionEndDate'] as Timestamp).toDate()
                     : null;
             _isPaused = doc['isPaused'] ?? false;
-            _pausedDays = doc['pausedDays'] ?? 0;
-            _isStudentVerified = doc['studentDetails']?['isVerified'] ?? false;
 
-            // Check expiration and auto-remove subscription
-            if (_activeSubscription &&
-                _subscriptionEndDate != null &&
-                _currentDate.isAfter(_subscriptionEndDate!)) {
-              _activeSubscription = false;
-              _firestore.collection('users').doc(user.uid).update({
-                'activeSubscription': false,
-                'subscriptionPlan': FieldValue.delete(),
-                'subscriptionStartDate': FieldValue.delete(),
-                'subscriptionEndDate': FieldValue.delete(),
-                'isPaused': FieldValue.delete(),
-                'pausedDays': FieldValue.delete(),
-              });
+            if (_activeSubscription && _subscriptionEndDate != null) {
+              _remainingSeconds =
+                  _subscriptionEndDate!.difference(_currentDate).inSeconds;
+              if (_remainingSeconds > 0 && !_isPaused) {
+                _startTimer();
+              } else if (_remainingSeconds <= 0) {
+                _deactivateSubscription();
+              }
             }
           });
         }
       } catch (e) {
         print('Error fetching user data: $e');
       }
+    }
+  }
+
+  void _startTimer() {
+    if (_timer != null) _timer!.cancel();
+    if (_remainingSeconds > 0 && !_isPaused) {
+      _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+        setState(() {
+          _remainingSeconds--;
+          if (_remainingSeconds <= 0) {
+            _deactivateSubscription();
+            timer.cancel();
+          }
+        });
+      });
+    }
+  }
+
+  void _deactivateSubscription() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      setState(() {
+        _activeSubscription = false;
+        _timer?.cancel();
+      });
+      await _firestore.collection('users').doc(user.uid).update({
+        'activeSubscription': false,
+        'subscriptionPlan': FieldValue.delete(),
+        'subscriptionStartDate': FieldValue.delete(),
+        'subscriptionEndDate': FieldValue.delete(),
+        'isPaused': FieldValue.delete(),
+      });
     }
   }
 
@@ -126,20 +159,28 @@ class _MenuScreenState extends State<MenuScreen> {
     return !(hour >= 21 || hour < 9);
   }
 
-  Future<void> _togglePause() async {
+  void _togglePausePlay() async {
     User? user = _auth.currentUser;
     if (user != null && _activeSubscription && _subscriptionEndDate != null) {
       setState(() {
         _isPaused = !_isPaused;
         if (_isPaused) {
-          _pausedDays++;
-          _subscriptionEndDate = _subscriptionEndDate!.add(Duration(days: 1));
+          _timer?.cancel();
+          _pauseStartTime = DateTime.now(); // Record pause start time
+        } else if (_pauseStartTime != null) {
+          final pausedDuration =
+              DateTime.now().difference(_pauseStartTime!).inSeconds;
+          _subscriptionEndDate = _subscriptionEndDate!.add(
+            Duration(seconds: pausedDuration),
+          );
+          _remainingSeconds += pausedDuration;
+          _pauseStartTime = null; // Reset pause start time
+          _startTimer();
         }
       });
       try {
         await _firestore.collection('users').doc(user.uid).update({
           'isPaused': _isPaused,
-          'pausedDays': _pausedDays,
           'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
         });
       } catch (e) {
@@ -148,6 +189,16 @@ class _MenuScreenState extends State<MenuScreen> {
         );
       }
     }
+  }
+
+  String _formatRemainingTime() {
+    final duration = Duration(seconds: _remainingSeconds);
+    final days = duration.inDays;
+    final weeks = (days / 7).floor();
+    final remainingDays = days % 7;
+    return weeks > 0
+        ? '$weeks week${weeks > 1 ? 's' : ''} $remainingDays day${remainingDays > 1 ? 's' : ''}'
+        : '$days day${days > 1 ? 's' : ''}';
   }
 
   @override
@@ -197,11 +248,16 @@ class _MenuScreenState extends State<MenuScreen> {
                 ),
                 if (_activeSubscription) ...[
                   SizedBox(height: 10),
+                  Text(
+                    'Time Left: ${_formatRemainingTime()}',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       ElevatedButton(
-                        onPressed: _canPauseOrPlay() ? _togglePause : null,
+                        onPressed: _canPauseOrPlay() ? _togglePausePlay : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
                               _isPaused ? Colors.green : Colors.orange,
@@ -213,11 +269,6 @@ class _MenuScreenState extends State<MenuScreen> {
                           _isPaused ? 'Play' : 'Pause',
                           style: TextStyle(color: Colors.white),
                         ),
-                      ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Paused Days: $_pausedDays',
-                        style: TextStyle(fontSize: 14),
                       ),
                     ],
                   ),

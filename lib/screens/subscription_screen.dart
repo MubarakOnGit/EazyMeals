@@ -88,30 +88,19 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
 
     final email = user.email ?? 'Unknown Email';
-    final now = DateTime.now();
-    final durationDays =
-        _selectedPlan == '1 Week'
-            ? 7
-            : _selectedPlan == '3 Weeks'
-            ? 21
-            : 28;
-    final endDate = now.add(Duration(days: durationDays));
 
-    // Save subscription with start and end dates
+    // Save pending subscription request without dates
     await _firestore.collection('users').doc(user.uid).set({
-      'activeSubscription': false, // Pending until admin verifies
+      'activeSubscription': false,
       'subscriptionPlan': _selectedPlan,
       'category': _selectedCategory,
       'mealType': _selectedMealType,
       'amount': _price,
       'isPaused': false,
-      'pausedDays': 0,
-      'subscriptionStartDate': Timestamp.fromDate(now),
-      'subscriptionEndDate': Timestamp.fromDate(endDate),
     }, SetOptions(merge: true));
 
     final message =
-        'Subscription Request\nEmail: $email\nCategory: $_selectedCategory\nMeal Type: $_selectedMealType\nPlan: $_selectedPlan\nAmount: ₹$_price\nStart Date: ${now.day}/${now.month}/${now.year}\nEnd Date: ${endDate.day}/${endDate.month}/${endDate.year}';
+        'Subscription Request\nEmail: $email\nCategory: $_selectedCategory\nMeal Type: $_selectedMealType\nPlan: $_selectedPlan\nAmount: ₹$_price';
     final whatsappUrl =
         'https://wa.me/+1234567890?text=${Uri.encodeComponent(message)}'; // Replace with admin number
 
