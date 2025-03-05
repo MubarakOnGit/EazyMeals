@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
           message: 'Google Sign-In successful',
           type: 'success',
         );
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pushReplacementNamed(context, '/CustomerDashboard');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
         type: 'success',
       );
 
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/CustomerDashboard');
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       String message = e.message ?? 'Invalid email or password';
