@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.eazy_meals">
 
+    <!-- Permissions should be here, right after the manifest tag -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
@@ -20,7 +24,7 @@
 
     <application
         android:label="eazy_meals"
-        android:icon="@mipmap/ic_launcher"> <!-- Removed android:name="${applicationName}" -->
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,4 +46,5 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+
 </manifest>

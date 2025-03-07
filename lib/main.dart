@@ -18,11 +18,6 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Eazy Meals',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
       initialRoute: '/onboarding', // Set OnboardingScreen as the initial route
       routes: {
         '/onboarding': (context) => OnboardingScreen(),

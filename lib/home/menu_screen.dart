@@ -1,10 +1,12 @@
-// lib/menu_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flip_card/flip_card.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
-
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../screens/subscription_screen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -15,8 +17,8 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FlutterSecureStorage _storage = FlutterSecureStorage();
   String _selectedCategory = 'Veg';
-  List<Map<String, dynamic>> _menus = [];
   DateTime _currentDate = DateTime.now();
   final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
   bool _activeSubscription = false;
@@ -31,11 +33,9 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void initState() {
     super.initState();
-    print('Current Date: $_currentDate');
-    _fetchMenus();
-    _fetchUserData();
     _scheduleDailyUpdate();
     _schedulePauseCheck();
+    _loadInitialState();
   }
 
   @override
@@ -44,79 +44,78 @@ class _MenuScreenState extends State<MenuScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchMenus() async {
-    try {
-      QuerySnapshot querySnapshot =
-          await _firestore
-              .collection('menus')
-              .where('category', isEqualTo: _selectedCategory)
-              .orderBy('weekNumber')
-              .get();
-
-      setState(() {
-        _menus =
-            querySnapshot.docs
-                .map((doc) => doc.data() as Map<String, dynamic>)
-                .toList();
-      });
-    } catch (e) {
-      print('Error fetching menus: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load menus: $e')));
-    }
-  }
-
-  Future<void> _fetchUserData() async {
+  Future<void> _loadInitialState() async {
     User? user = _auth.currentUser;
     if (user != null) {
-      try {
-        DocumentSnapshot doc =
-            await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-          setState(() {
-            _activeSubscription = doc['activeSubscription'] ?? false;
-            _subscriptionPlan = doc['subscriptionPlan'];
-            _subscriptionStartDate =
-                doc['subscriptionStartDate'] != null
-                    ? (doc['subscriptionStartDate'] as Timestamp).toDate()
-                    : null;
-            _subscriptionEndDate =
-                doc['subscriptionEndDate'] != null
-                    ? (doc['subscriptionEndDate'] as Timestamp).toDate()
-                    : null;
-            _isPaused = doc['isPaused'] ?? false;
-            _pauseStartTime =
-                doc['pausedAt'] != null
-                    ? (doc['pausedAt'] as Timestamp).toDate()
-                    : null;
-
-            if (_activeSubscription && _subscriptionEndDate != null) {
-              _remainingSeconds =
-                  _subscriptionEndDate!.difference(_currentDate).inSeconds;
-              if (_remainingSeconds > 0 && !_isPaused) {
-                _startTimer();
-              }
-            }
-          });
-        }
-      } catch (e) {
-        print('Error fetching user data: $e');
+      DocumentSnapshot doc =
+          await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _activeSubscription = data['activeSubscription'] ?? false;
+          _subscriptionPlan = data['subscriptionPlan'];
+          _subscriptionStartDate =
+              data['subscriptionStartDate'] != null
+                  ? (data['subscriptionStartDate'] as Timestamp).toDate()
+                  : null;
+          _subscriptionEndDate =
+              data['subscriptionEndDate'] != null
+                  ? (data['subscriptionEndDate'] as Timestamp).toDate()
+                  : null;
+          _isPaused = data['isPaused'] ?? false;
+          _pauseStartTime =
+              data['pausedAt'] != null
+                  ? (data['pausedAt'] as Timestamp).toDate()
+                  : null;
+          if (_activeSubscription && _subscriptionEndDate != null) {
+            _remainingSeconds =
+                _subscriptionEndDate!.difference(_currentDate).inSeconds;
+            if (_remainingSeconds > 0 && !_isPaused) _startTimer();
+          }
+        });
       }
     }
   }
 
+  Future<String?> _getLocalImagePath(String url, String key) async {
+    if (url.isEmpty) return null;
+    final storedUrl = await _storage.read(key: key);
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = url.hashCode.toString();
+    final filePath = '${directory.path}/$fileName.jpg';
+    final file = File(filePath);
+
+    if (storedUrl == url && file.existsSync()) {
+      return filePath;
+    } else if (storedUrl != url) {
+      try {
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          await file.writeAsBytes(response.bodyBytes);
+          await _storage.write(key: key, value: url);
+          print('Downloaded and saved image for $key: $filePath');
+          return filePath;
+        }
+      } catch (e) {
+        print('Error downloading image for $key: $e');
+      }
+    }
+    return null;
+  }
+
   void _startTimer() {
-    if (_timer != null) _timer!.cancel();
+    _timer?.cancel();
     if (_remainingSeconds > 0 && !_isPaused) {
       _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-        setState(() {
-          _remainingSeconds--;
-          if (_remainingSeconds <= 0) {
-            _deactivateSubscription();
-            timer.cancel();
-          }
-        });
+        if (mounted) {
+          setState(() {
+            _remainingSeconds--;
+            if (_remainingSeconds <= 0) {
+              _deactivateSubscription();
+              timer.cancel();
+            }
+          });
+        }
       });
     }
   }
@@ -136,34 +135,29 @@ class _MenuScreenState extends State<MenuScreen> {
         'isPaused': FieldValue.delete(),
         'pausedAt': FieldValue.delete(),
       });
+      print('Subscription deactivated for ${user.uid}');
     }
   }
 
   void _scheduleDailyUpdate() {
     final now = DateTime.now();
     var scheduledTime = DateTime(now.year, now.month, now.day, 21, 0);
-    if (now.isAfter(scheduledTime)) {
+    if (now.isAfter(scheduledTime))
       scheduledTime = scheduledTime.add(Duration(days: 1));
-    }
     final duration = scheduledTime.difference(now);
 
     Future.delayed(duration, () {
-      setState(() {
-        _currentDate = DateTime.now();
-        print('Updated Current Date: $_currentDate');
-        _fetchMenus();
-        _fetchUserData();
-      });
-      _scheduleDailyUpdate();
+      if (mounted) {
+        setState(() => _currentDate = DateTime.now());
+        _scheduleDailyUpdate();
+      }
     });
   }
 
   void _schedulePauseCheck() {
     final now = DateTime.now();
-    var next930PM = DateTime(now.year, now.month, now.day, 21, 30); // 9:30 PM
-    if (now.isAfter(next930PM)) {
-      next930PM = next930PM.add(Duration(days: 1));
-    }
+    var next930PM = DateTime(now.year, now.month, now.day, 21, 30);
+    if (now.isAfter(next930PM)) next930PM = next930PM.add(Duration(days: 1));
     final duration = next930PM.difference(now);
 
     Timer(duration, () async {
@@ -174,92 +168,94 @@ class _MenuScreenState extends State<MenuScreen> {
         if (doc.exists &&
             doc['activeSubscription'] == true &&
             doc['isPaused'] == true) {
-          DateTime tomorrow = now.add(Duration(days: 1));
-          DateTime tomorrowStart = DateTime(
-            tomorrow.year,
-            tomorrow.month,
-            tomorrow.day,
-            0,
-            0,
-          );
-          DateTime tomorrowEnd = DateTime(
-            tomorrow.year,
-            tomorrow.month,
-            tomorrow.day,
-            23,
-            59,
-            59,
-          );
-
-          QuerySnapshot orders =
-              await _firestore
-                  .collection('orders')
-                  .where('userId', isEqualTo: user.uid)
-                  .where(
-                    'date',
-                    isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-                  )
-                  .where(
-                    'date',
-                    isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd),
-                  )
-                  .get();
-
-          for (var order in orders.docs) {
-            await order.reference.update({'status': 'Paused'});
-            print('Confirmed pause for tomorrow\'s order for ${user.uid}');
-          }
+          await _markNextDayPaused(user.uid);
         }
       }
-      _schedulePauseCheck();
+      if (mounted) _schedulePauseCheck();
     });
   }
 
   bool _canPauseOrPlay() {
     final now = DateTime.now();
     final hour = now.hour;
-    return !(hour >= 21 || hour < 9); // Allow between 9 AM and 9 PM
+    return _activeSubscription && (hour >= 9 && hour < 21);
   }
 
   void _togglePausePlay() async {
     User? user = _auth.currentUser;
-    if (user != null && _activeSubscription && _subscriptionEndDate != null) {
-      setState(() {
-        _isPaused = !_isPaused;
-        if (_isPaused) {
-          _timer?.cancel();
-          _pauseStartTime = DateTime.now();
-          _markNextDayPaused(user.uid);
-        } else if (_pauseStartTime != null) {
+    if (user == null || !_activeSubscription || _subscriptionEndDate == null) {
+      print(
+        'Cannot toggle: user=$user, active=$_activeSubscription, endDate=$_subscriptionEndDate',
+      );
+      return;
+    }
+
+    print('Toggling pause/play. Current state: isPaused=$_isPaused');
+    bool newIsPaused = !_isPaused; // Calculate new state first
+
+    setState(() {
+      if (_isPaused) {
+        // Resuming
+        if (_pauseStartTime != null) {
           final pausedDuration =
               DateTime.now().difference(_pauseStartTime!).inSeconds;
           _subscriptionEndDate = _subscriptionEndDate!.add(
             Duration(seconds: pausedDuration),
           );
-          _remainingSeconds += pausedDuration;
+          _remainingSeconds =
+              _subscriptionEndDate!.difference(_currentDate).inSeconds;
+          _isPaused = false;
           _pauseStartTime = null;
           _startTimer();
-          _resumeNextDay(user.uid);
+          print(
+            'Resuming: new endDate=$_subscriptionEndDate, remainingSeconds=$_remainingSeconds',
+          );
         }
-      });
-      try {
-        await _firestore.collection('users').doc(user.uid).update({
-          'isPaused': _isPaused,
-          'pausedAt': _isPaused ? Timestamp.now() : FieldValue.delete(),
-          'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
-        });
-        print(_isPaused ? 'Subscription paused' : 'Subscription resumed');
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update pause status: $e')),
-        );
+      } else {
+        // Pausing
+        _isPaused = true;
+        _pauseStartTime = DateTime.now();
+        _timer?.cancel();
+        print('Pausing: pauseStartTime=$_pauseStartTime');
       }
+    });
+
+    try {
+      final batch = _firestore.batch();
+      final userDocRef = _firestore.collection('users').doc(user.uid);
+      batch.update(userDocRef, {
+        'isPaused': newIsPaused, // Use the new state here
+        'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
+        'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
+      });
+
+      if (newIsPaused) {
+        await _markNextDayPaused(user.uid);
+      } else {
+        await _resumeNextDay(user.uid);
+      }
+
+      await batch.commit();
+      print('Firestore updated successfully: isPaused=$newIsPaused');
+    } catch (e) {
+      print('Error in togglePausePlay: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      setState(() {
+        _isPaused = !newIsPaused; // Revert to previous state on failure
+        if (!_isPaused) _startTimer();
+      });
     }
   }
 
-  void _markNextDayPaused(String userId) async {
+  Future<void> _markNextDayPaused(String userId) async {
     final now = DateTime.now();
-    final tomorrow = now.add(Duration(days: 1));
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(days: 1));
     final tomorrowStart = DateTime(
       tomorrow.year,
       tomorrow.month,
@@ -288,15 +284,21 @@ class _MenuScreenState extends State<MenuScreen> {
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
 
+    final batch = _firestore.batch();
     for (var order in orders.docs) {
-      await order.reference.update({'status': 'Paused'});
-      print('Marked next day\'s order as Paused for $userId');
+      batch.update(order.reference, {'status': 'Paused'});
     }
+    await batch.commit();
+    print('Paused ${orders.docs.length} orders for tomorrow');
   }
 
-  void _resumeNextDay(String userId) async {
+  Future<void> _resumeNextDay(String userId) async {
     final now = DateTime.now();
-    final tomorrow = now.add(Duration(days: 1));
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(days: 1));
     final tomorrowStart = DateTime(
       tomorrow.year,
       tomorrow.month,
@@ -325,21 +327,19 @@ class _MenuScreenState extends State<MenuScreen> {
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
 
+    final batch = _firestore.batch();
     for (var order in orders.docs) {
-      await order.reference.update({'status': 'Pending Delivery'});
-      print('Resumed next day\'s order for $userId');
+      batch.update(order.reference, {'status': 'Pending Delivery'});
     }
+    await batch.commit();
+    print('Resumed ${orders.docs.length} orders for tomorrow');
   }
 
   String _formatRemainingTime() {
     if (_subscriptionEndDate == null) return 'N/A';
     final duration = _subscriptionEndDate!.difference(_currentDate);
-    final days = duration.inDays;
-    final weeks = (days / 7).floor();
-    final remainingDays = days % 7;
-    return weeks > 0
-        ? '$weeks week${weeks > 1 ? 's' : ''} $remainingDays day${remainingDays > 1 ? 's' : ''}'
-        : '$days day${days > 1 ? 's' : ''}';
+    final days = (duration.inSeconds / 86400).ceil();
+    return days <= 0 ? 'Expired' : '$days day${days > 1 ? 's' : ''}';
   }
 
   @override
@@ -362,12 +362,9 @@ class _MenuScreenState extends State<MenuScreen> {
                     return ChoiceChip(
                       label: Text(category),
                       selected: _selectedCategory == category,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = category;
-                          _fetchMenus();
-                        });
-                      },
+                      onSelected:
+                          (selected) =>
+                              setState(() => _selectedCategory = category),
                       selectedColor: Colors.blue,
                       labelStyle: TextStyle(
                         color:
@@ -379,62 +376,133 @@ class _MenuScreenState extends State<MenuScreen> {
                   }).toList(),
             ),
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                Text(
-                  'Subscription: ${_activeSubscription ? 'Active ${_subscriptionPlan != null ? "($_subscriptionPlan)" : ""}${_subscriptionStartDate != null ? " - Starts ${_subscriptionStartDate!.day}/${_subscriptionStartDate!.month}/${_subscriptionStartDate!.year}" : ""}${_subscriptionEndDate != null ? " - Ends ${_subscriptionEndDate!.day}/${_subscriptionEndDate!.month}/${_subscriptionEndDate!.year}" : ""}' : 'Pending or Not Subscribed'}',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                if (_activeSubscription) ...[
-                  SizedBox(height: 10),
-                  Text(
-                    'Time Left: ${_formatRemainingTime()}',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: _canPauseOrPlay() ? _togglePausePlay : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              _isPaused ? Colors.green : Colors.orange,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          _isPaused ? 'Play' : 'Pause',
-                          style: TextStyle(color: Colors.white),
+          StreamBuilder<DocumentSnapshot>(
+            stream:
+                _firestore
+                    .collection('users')
+                    .doc(_auth.currentUser?.uid)
+                    .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData)
+                return Center(child: CircularProgressIndicator());
+              final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+              _activeSubscription = data['activeSubscription'] ?? false;
+              _subscriptionPlan = data['subscriptionPlan'];
+              _subscriptionStartDate =
+                  data['subscriptionStartDate'] != null
+                      ? (data['subscriptionStartDate'] as Timestamp).toDate()
+                      : null;
+              _subscriptionEndDate =
+                  data['subscriptionEndDate'] != null
+                      ? (data['subscriptionEndDate'] as Timestamp).toDate()
+                      : null;
+              // Sync _isPaused only if it hasn’t been changed locally
+              if (data['isPaused'] != null && !_isPaused != data['isPaused']) {
+                _isPaused = data['isPaused'];
+              }
+              _pauseStartTime =
+                  data['pausedAt'] != null
+                      ? (data['pausedAt'] as Timestamp).toDate()
+                      : null;
+
+              if (_activeSubscription && _subscriptionEndDate != null) {
+                _remainingSeconds =
+                    _subscriptionEndDate!.difference(_currentDate).inSeconds;
+                if (_remainingSeconds > 0 && !_isPaused && _timer == null)
+                  _startTimer();
+              } else {
+                _timer?.cancel();
+                _timer = null;
+              }
+
+              return Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Subscription: ${_activeSubscription ? 'Active ${_subscriptionPlan ?? ""}${_subscriptionStartDate != null ? " - Starts ${_subscriptionStartDate!.day}/${_subscriptionStartDate!.month}/${_subscriptionStartDate!.year}" : ""}${_subscriptionEndDate != null ? " - Ends ${_subscriptionEndDate!.day}/${_subscriptionEndDate!.month}/${_subscriptionEndDate!.year}" : ""}' : 'Pending or Not Subscribed'}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_activeSubscription) ...[
+                      SizedBox(height: 10),
+                      Text(
+                        'Time Left: ${_formatRemainingTime()}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                      SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed:
+                                _canPauseOrPlay() ? _togglePausePlay : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _isPaused ? Colors.green : Colors.orange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _isPaused ? 'Play' : 'Pause',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
-                  ),
-                ],
-              ],
+                  ],
+                ),
+              );
+            },
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  _firestore
+                      .collection('menus')
+                      .where('category', isEqualTo: _selectedCategory)
+                      .where(
+                        'weekNumber',
+                        isGreaterThanOrEqualTo:
+                            _currentDate.subtract(Duration(days: 7)).weekOfYear,
+                      )
+                      .where(
+                        'weekNumber',
+                        isLessThanOrEqualTo:
+                            _currentDate.add(Duration(days: 28)).weekOfYear,
+                      )
+                      .orderBy('weekNumber')
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData)
+                  return Center(child: CircularProgressIndicator());
+                final menus =
+                    snapshot.data!.docs
+                        .map((doc) => doc.data() as Map<String, dynamic>)
+                        .toList();
+                return _buildTimeline(menus);
+              },
             ),
           ),
-          Expanded(child: _buildTimeline()),
           Padding(
             padding: EdgeInsets.all(16.0),
             child: ElevatedButton(
-              onPressed: () {
-                if (_activeSubscription) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('You already have an active plan')),
-                  );
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SubscriptionScreen(),
-                    ),
-                  ).then((_) => _fetchUserData());
-                }
-              },
+              onPressed:
+                  _activeSubscription
+                      ? null
+                      : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SubscriptionScreen(),
+                        ),
+                      ).then((_) => setState(() {})),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
                     _activeSubscription ? Colors.grey : Colors.blue,
@@ -446,7 +514,7 @@ class _MenuScreenState extends State<MenuScreen> {
               child: Text(
                 _activeSubscription
                     ? 'Already Subscribed'
-                    : 'Subscribe Plan Now',
+                    : 'Request Subscription',
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
             ),
@@ -456,7 +524,7 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildTimeline() {
+  Widget _buildTimeline(List<Map<String, dynamic>> menus) {
     final daysOfWeek = [
       'Monday',
       'Tuesday',
@@ -466,16 +534,14 @@ class _MenuScreenState extends State<MenuScreen> {
       'Saturday',
       'Sunday',
     ];
-
-    final allDays = List.generate(35, (index) {
-      final dayOffset = index - 7;
-      final date = _currentDate.add(Duration(days: dayOffset));
-      return date;
-    });
-
-    final weeks = List.generate(5, (weekIndex) {
-      return allDays.sublist(weekIndex * 7, (weekIndex + 1) * 7);
-    });
+    final allDays = List.generate(
+      35,
+      (index) => _currentDate.add(Duration(days: index - 7)),
+    );
+    final weeks = List.generate(
+      5,
+      (weekIndex) => allDays.sublist(weekIndex * 7, (weekIndex + 1) * 7),
+    );
 
     return ListView.builder(
       itemCount: weeks.length,
@@ -502,11 +568,10 @@ class _MenuScreenState extends State<MenuScreen> {
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 12),
-                ...weeks[weekIndex].asMap().entries.map((entry) {
-                  final dayIndex = entry.key;
-                  final date = entry.value;
-                  return _buildDayItem(date, daysOfWeek[date.weekday - 1]);
-                }),
+                ...weeks[weekIndex].map(
+                  (date) =>
+                      _buildDayItem(date, daysOfWeek[date.weekday - 1], menus),
+                ),
               ],
             ),
           ),
@@ -515,7 +580,11 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildDayItem(DateTime date, String day) {
+  Widget _buildDayItem(
+    DateTime date,
+    String day,
+    List<Map<String, dynamic>> menus,
+  ) {
     final isPastDay = date.isBefore(_currentDate);
     final isCurrentDay =
         date.day == _currentDate.day &&
@@ -552,7 +621,14 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
           SizedBox(width: 8),
           Expanded(
-            child: _buildMealItem(date, day, 'Lunch', isPastDay, isCurrentDay),
+            child: _buildMealItem(
+              date,
+              day,
+              'Lunch',
+              isPastDay,
+              isCurrentDay,
+              menus,
+            ),
           ),
           Container(
             width: 2,
@@ -575,7 +651,14 @@ class _MenuScreenState extends State<MenuScreen> {
             ),
           ),
           Expanded(
-            child: _buildMealItem(date, day, 'Dinner', isPastDay, isCurrentDay),
+            child: _buildMealItem(
+              date,
+              day,
+              'Dinner',
+              isPastDay,
+              isCurrentDay,
+              menus,
+            ),
           ),
         ],
       ),
@@ -588,17 +671,18 @@ class _MenuScreenState extends State<MenuScreen> {
     String mealType,
     bool isPastDay,
     bool isCurrentDay,
+    List<Map<String, dynamic>> menus,
   ) {
-    final menu = _menus.firstWhere(
+    final menu = menus.firstWhere(
       (menu) => menu['weekNumber'] == date.weekOfYear,
       orElse: () => {},
     );
-
     final items = menu['items'] as List<dynamic>? ?? [];
     final item = items.firstWhere(
       (item) => item['day'] == day && item['mealType'] == mealType,
       orElse: () => {},
     );
+    final key = 'image-$day-$mealType-${date.weekOfYear}-$_selectedCategory';
 
     return FlipCard(
       fill: Fill.fillBack,
@@ -646,22 +730,32 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
         ),
       ),
-      back: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: Container(
-          height: 100,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            image: DecorationImage(
-              image:
-                  item['imageUrl'] != null
-                      ? NetworkImage(item['imageUrl'])
-                      : AssetImage('assets/placeholder.png') as ImageProvider,
-              fit: BoxFit.cover,
+      back: FutureBuilder<String?>(
+        future: _getLocalImagePath(item['imageUrl'] ?? '', key),
+        builder: (context, snapshot) {
+          final localImagePath = snapshot.data;
+          return Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
-          ),
-        ),
+            child: Container(
+              height: 100,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                image: DecorationImage(
+                  image:
+                      localImagePath != null &&
+                              File(localImagePath).existsSync()
+                          ? FileImage(File(localImagePath))
+                          : AssetImage('assets/placeholder.png')
+                              as ImageProvider,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -673,7 +767,6 @@ extension DateTimeExtension on DateTime {
     final firstMonday = startOfYear.add(
       Duration(days: (8 - startOfYear.weekday) % 7),
     );
-    final weekNumber = (difference(firstMonday).inDays / 7).floor() + 1;
-    return weekNumber;
+    return (difference(firstMonday).inDays / 7).floor() + 1;
   }
 }

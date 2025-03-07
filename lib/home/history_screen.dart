@@ -1,4 +1,3 @@
-// lib/history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,344 +11,465 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  bool _isExpanded = false;
+  bool _isDataMissing = false;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _scheduleOrderCancellation();
-    _pageController.addListener(() {
-      setState(() {
-        _currentPage = _pageController.page!.round();
-      });
-    });
+    _checkUserData();
   }
 
   void _scheduleOrderCancellation() {
     final now = DateTime.now();
     var next12PM = DateTime(now.year, now.month, now.day, 12, 0);
-    if (now.isAfter(next12PM)) {
-      next12PM = next12PM.add(Duration(days: 1));
-    }
+    if (now.isAfter(next12PM)) next12PM = next12PM.add(Duration(days: 1));
     final duration = next12PM.difference(now);
 
     Timer(duration, () async {
       await _cancelPendingOrders();
-      _scheduleOrderCancellation();
+      if (mounted) _scheduleOrderCancellation();
     });
   }
 
   Future<void> _cancelPendingOrders() async {
     User? user = _auth.currentUser;
     if (user != null) {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      QuerySnapshot orders =
+          await _firestore
+              .collection('orders')
+              .where('userId', isEqualTo: user.uid)
+              .where('status', isEqualTo: 'Pending Delivery')
+              .where(
+                'date',
+                isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
+              )
+              .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
+              .get();
+
+      final batch = _firestore.batch();
+      for (var doc in orders.docs) {
+        batch.update(doc.reference, {'status': 'Cancelled'});
+      }
+      await batch.commit();
+      print('Cancelled ${orders.docs.length} pending orders for today');
+    }
+  }
+
+  Future<void> _checkUserData() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
       DocumentSnapshot userDoc =
           await _firestore.collection('users').doc(user.uid).get();
-      if (userDoc.exists && userDoc['activeSubscription'] == true) {
-        QuerySnapshot orders =
-            await _firestore
-                .collection('orders')
-                .where('userId', isEqualTo: user.uid)
-                .where('status', isEqualTo: 'Pending Delivery')
-                .get();
+      final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+      final name = userData['name'] as String?;
+      final phone = userData['phone'] as String?;
 
-        for (var doc in orders.docs) {
-          DateTime orderDate = (doc['date'] as Timestamp).toDate();
-          if (orderDate.day == DateTime.now().day) {
-            await doc.reference.update({'status': 'Cancelled'});
-            print('Cancelled today\'s pending order for ${user.uid}');
-          }
-        }
+      if (name == null || phone == null || name.isEmpty || phone.isEmpty) {
+        setState(() => _isDataMissing = true);
+      } else {
+        setState(() => _isDataMissing = false);
       }
     }
   }
 
+  Future<void> _saveUserData() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Please fill in all fields')));
+        return;
+      }
+
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': _nameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+      }, SetOptions(merge: true));
+
+      setState(() => _isDataMissing = false);
+      print('User data saved for ${user.uid}');
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          SizedBox(height: 40),
-          Center(
-            child: Text(
-              'Order History',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-          ),
-          SizedBox(height: 20),
-          Row(
+    User? user = _auth.currentUser;
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Order History'),
+          backgroundColor: Colors.blue,
+          centerTitle: true,
+        ),
+        body: Center(child: Text('Please log in')),
+      );
+    }
+
+    if (_isDataMissing) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Order History'),
+          backgroundColor: Colors.blue,
+          centerTitle: true,
+        ),
+        body: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              GestureDetector(
-                onTap:
-                    () => _pageController.animateToPage(
-                      0,
-                      duration: Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    ),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'Subscriptions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight:
-                          _currentPage == 0
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                      color: _currentPage == 0 ? Colors.blue : Colors.grey,
-                    ),
-                  ),
+              Text(
+                'We need some information for delivery',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 20),
+              TextField(
+                controller: _nameController,
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
                 ),
               ),
-              StreamBuilder<DocumentSnapshot>(
-                stream:
-                    _firestore
-                        .collection('users')
-                        .doc(_auth.currentUser?.uid)
-                        .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return SizedBox.shrink();
-                  final data = snapshot.data!.data() as Map<String, dynamic>;
-                  final isActive = data['activeSubscription'] ?? false;
-
-                  return isActive
-                      ? GestureDetector(
-                        onTap:
-                            () => _pageController.animateToPage(
-                              1,
-                              duration: Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 20),
-                          child: Text(
-                            'Orders',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight:
-                                  _currentPage == 1
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                              color:
-                                  _currentPage == 1 ? Colors.blue : Colors.grey,
-                            ),
-                          ),
-                        ),
-                      )
-                      : SizedBox.shrink(); // Hide Orders tab if no active subscription
-                },
+              SizedBox(height: 20),
+              TextField(
+                controller: _phoneController,
+                decoration: InputDecoration(
+                  labelText: 'Phone Number',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _saveUserData,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+                child: Text('Save', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
-          SizedBox(height: 10),
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              children: [_buildSubscriptionsSection(), _buildOrdersSection()],
-            ),
-          ),
-        ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Order History'),
+        backgroundColor: Colors.blue,
+        centerTitle: true,
       ),
-    );
-  }
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _firestore.collection('users').doc(user.uid).snapshots(),
+        builder: (context, userSnapshot) {
+          if (!userSnapshot.hasData)
+            return Center(child: CircularProgressIndicator());
+          final userData =
+              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final hasSubscriptionData =
+              userData.containsKey('subscriptionPlan') ||
+              userData.containsKey('activeSubscription');
 
-  Widget _buildSubscriptionsSection() {
-    User? user = _auth.currentUser;
-    if (user == null) return Center(child: Text('Please log in'));
+          if (!hasSubscriptionData) {
+            return Center(
+              child: Text(
+                'This page is empty',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+            );
+          }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Subscriptions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-          ),
-          StreamBuilder<DocumentSnapshot>(
-            stream: _firestore.collection('users').doc(user.uid).snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return CircularProgressIndicator();
-              final data = snapshot.data!.data() as Map<String, dynamic>;
-              final isActive = data['activeSubscription'] ?? false;
-              final startDate =
-                  data['subscriptionStartDate'] != null
-                      ? (data['subscriptionStartDate'] as Timestamp).toDate()
-                      : null;
-              final endDate =
-                  data['subscriptionEndDate'] != null
-                      ? (data['subscriptionEndDate'] as Timestamp).toDate()
-                      : null;
-
-              return Card(
-                color: isActive ? Colors.green[100] : Colors.red[100],
-                child: ListTile(
-                  title: Text(
-                    '${data['subscriptionPlan'] ?? 'No Plan'} (${data['category'] ?? 'N/A'})',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Start: ${startDate != null ? "${startDate.day}/${startDate.month}/${startDate.year}" : 'N/A'}',
-                      ),
-                      Text(
-                        'End: ${endDate != null ? "${endDate.day}/${endDate.month}/${endDate.year}" : 'N/A'}',
-                      ),
-                      Text('Status: ${isActive ? 'Active' : 'Inactive'}'),
-                    ],
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'Active Subscriptions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ),
-              );
-            },
-          ),
-          if (_currentPage == 0) ...[
-            SizedBox(height: 20),
-            Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Active Orders',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+                _buildActiveSubscriptionSection(userData, user.uid),
+                SizedBox(height: 20),
+                Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'Ended Subscriptions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                _buildEndedSubscriptions(userData, user.uid),
+              ],
             ),
-            StreamBuilder<QuerySnapshot>(
-              stream:
-                  _firestore
-                      .collection('orders')
-                      .where('userId', isEqualTo: user.uid)
-                      .where('status', isEqualTo: 'Pending Delivery')
-                      .orderBy('date')
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return CircularProgressIndicator();
-                final orders = snapshot.data!.docs;
-                return orders.isEmpty
-                    ? Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text('No active orders'),
-                    )
-                    : ListView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: orders.length,
-                      itemBuilder: (context, index) {
-                        final order = orders[index];
-                        return _buildOrderTile(order);
-                      },
-                    );
-              },
-            ),
-            SizedBox(height: 20),
-            Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Completed Orders',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ),
-            StreamBuilder<QuerySnapshot>(
-              stream:
-                  _firestore
-                      .collection('orders')
-                      .where('userId', isEqualTo: user.uid)
-                      .where('status', whereIn: ['Delivered', 'Cancelled'])
-                      .orderBy('date', descending: true)
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return CircularProgressIndicator();
-                final orders = snapshot.data!.docs;
-                return orders.isEmpty
-                    ? Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text('No completed orders'),
-                    )
-                    : ListView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: orders.length,
-                      itemBuilder: (context, index) {
-                        final order = orders[index];
-                        return _buildOrderTile(order);
-                      },
-                    );
-              },
-            ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildOrdersSection() {
-    User? user = _auth.currentUser;
-    if (user == null) return Center(child: Text('Please log in'));
+  Widget _buildActiveSubscriptionSection(
+    Map<String, dynamic> userData,
+    String userId,
+  ) {
+    final isActive = userData['activeSubscription'] as bool? ?? false;
+    if (!isActive)
+      return Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text('No active subscription'),
+      );
+    return _buildActiveSubscriptionCard(userData, userId);
+  }
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _firestore.collection('users').doc(user.uid).snapshots(),
-      builder: (context, userSnapshot) {
-        if (!userSnapshot.hasData)
-          return Center(child: CircularProgressIndicator());
-        final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-        final isActive = userData['activeSubscription'] ?? false;
+  Widget _buildActiveSubscriptionCard(
+    Map<String, dynamic> userData,
+    String userId,
+  ) {
+    final startDate =
+        (userData['subscriptionStartDate'] as Timestamp?)?.toDate();
+    final endDate = (userData['subscriptionEndDate'] as Timestamp?)?.toDate();
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final tomorrowStart = DateTime(now.year, now.month, now.day + 1, 0, 0);
+    final tomorrowEnd = DateTime(now.year, now.month, now.day + 1, 23, 59, 59);
 
-        if (!isActive) {
-          return Center(child: Text('No active subscription to view orders'));
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream:
-              _firestore
-                  .collection('orders')
-                  .where('userId', isEqualTo: user.uid)
-                  .orderBy('date', descending: true)
-                  .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData)
-              return Center(child: CircularProgressIndicator());
-            List<QueryDocumentSnapshot> docs = snapshot.data!.docs;
-            List<QueryDocumentSnapshot> pendingOrders =
-                docs
-                    .where((doc) => doc['status'] == 'Pending Delivery')
-                    .toList();
-            List<QueryDocumentSnapshot> otherOrders =
-                docs
-                    .where((doc) => doc['status'] != 'Pending Delivery')
-                    .toList();
-
-            return ListView(
+    return Card(
+      elevation: 4,
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ...pendingOrders.map((doc) => _buildOrderTile(doc)),
-                ...otherOrders.map((doc) => _buildOrderTile(doc)),
+                Text(
+                  '${userData['subscriptionPlan'] ?? 'Unknown Plan'} (${userData['category'] ?? 'N/A'}) - ${userData['mealType'] ?? 'N/A'}',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  ),
+                  onPressed: () => setState(() => _isExpanded = !_isExpanded),
+                ),
               ],
-            );
-          },
-        );
-      },
+            ),
+            Text(
+              'Start: ${startDate != null ? "${startDate.day}/${startDate.month}/${startDate.year}" : 'N/A'} - End: ${endDate != null ? "${endDate.day}/${endDate.month}/${endDate.year}" : 'N/A'}',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 10),
+            StreamBuilder<QuerySnapshot>(
+              stream:
+                  _firestore
+                      .collection('orders')
+                      .where('userId', isEqualTo: userId)
+                      .where(
+                        'date',
+                        isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
+                      )
+                      .where(
+                        'date',
+                        isLessThanOrEqualTo: Timestamp.fromDate(todayEnd),
+                      )
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return Text('Loading today\'s order...');
+                final orders = snapshot.data!.docs;
+                print('Today\'s orders fetched: ${orders.length}');
+                if (orders.isEmpty) return Text('No order for today');
+
+                final order = orders.first.data() as Map<String, dynamic>;
+                final status = order['status'] ?? 'Unknown';
+                print('Today\'s order status: $status');
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Today\'s Order: ${order['mealType'] ?? 'N/A'}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Status: $status',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _getStatusColor(status),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            if (_isExpanded) ...[
+              SizedBox(height: 10),
+              Text(
+                'Completed/Cancelled/Paused Orders',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    _firestore
+                        .collection('orders')
+                        .where('userId', isEqualTo: userId)
+                        .where(
+                          'status',
+                          whereIn: ['Delivered', 'Cancelled', 'Paused'],
+                        )
+                        .orderBy('date', descending: true)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return CircularProgressIndicator();
+                  final orders = snapshot.data!.docs;
+                  print(
+                    'Completed/Cancelled/Paused orders fetched: ${orders.length}',
+                  );
+                  return orders.isEmpty
+                      ? Text('No completed, cancelled, or paused orders')
+                      : Column(
+                        children:
+                            orders.map((doc) => _buildOrderTile(doc)).toList(),
+                      );
+                },
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Upcoming Orders',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    _firestore
+                        .collection('orders')
+                        .where('userId', isEqualTo: userId)
+                        .where(
+                          'date',
+                          isGreaterThanOrEqualTo: Timestamp.fromDate(
+                            tomorrowStart,
+                          ),
+                        )
+                        .where(
+                          'date',
+                          isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd),
+                        )
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return CircularProgressIndicator();
+                  final orders = snapshot.data!.docs;
+                  print('Upcoming orders fetched: ${orders.length}');
+                  for (var order in orders) {
+                    final data = order.data() as Map<String, dynamic>;
+                    print(
+                      'Upcoming order: ${data['mealType']} - Status: ${data['status']} - Date: ${(data['date'] as Timestamp).toDate()}',
+                    );
+                  }
+                  return orders.isEmpty
+                      ? Text('No upcoming orders for tomorrow')
+                      : Column(
+                        children:
+                            orders.map((doc) => _buildOrderTile(doc)).toList(),
+                      );
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndedSubscriptions(
+    Map<String, dynamic> userData,
+    String userId,
+  ) {
+    final isActive = userData['activeSubscription'] as bool? ?? false;
+    final startDate =
+        (userData['subscriptionStartDate'] as Timestamp?)?.toDate();
+    final endDate = (userData['subscriptionEndDate'] as Timestamp?)?.toDate();
+
+    if (isActive || (startDate == null && endDate == null)) {
+      return Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text('No ended subscriptions'),
+      );
+    }
+
+    return Card(
+      elevation: 4,
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${userData['subscriptionPlan'] ?? 'Unknown Plan'} (${userData['category'] ?? 'N/A'}) - ${userData['mealType'] ?? 'N/A'}',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Start: ${startDate != null ? "${startDate.day}/${startDate.month}/${startDate.year}" : 'N/A'} - End: ${endDate != null ? "${endDate.day}/${endDate.month}/${endDate.year}" : 'N/A'}',
+              style: TextStyle(fontSize: 14),
+            ),
+            Text(
+              'Status: Ended',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildOrderTile(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    final date = (data['date'] as Timestamp).toDate();
-    final status = data['status'];
+    final date = (data['date'] as Timestamp?)?.toDate();
+    final status = data['status'] ?? 'Unknown';
 
-    return Card(
-      color:
-          status == 'Pending Delivery'
-              ? Colors.yellow[100]
-              : status == 'Delivered'
-              ? Colors.green[100]
-              : Colors.red[100],
-      child: ListTile(
-        title: Text(
-          '${data['mealType']} - ${date.day}/${date.month}/${date.year}',
-        ),
-        subtitle: Text('Status: $status'),
+    return ListTile(
+      title: Text(
+        '${data['mealType'] ?? 'N/A'} - ${date != null ? "${date.day}/${date.month}/${date.year}" : 'N/A'}',
       ),
+      subtitle: Text('Status: $status'),
+      tileColor: _getStatusColor(status).withOpacity(0.1),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Pending Delivery':
+        return Colors.yellow[800]!;
+      case 'Delivered':
+        return Colors.green;
+      case 'Cancelled':
+        return Colors.red;
+      case 'Paused':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/location_details.dart';
+import 'adress/adress_pick.dart'; // Ensure this import points to the updated MapAddressPickerScreen
 
 class AddressManagementScreen extends StatefulWidget {
   @override
@@ -12,10 +14,19 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController _addressController = TextEditingController();
-  List<String> _addresses = ['12 Food Street, Metro City']; // Dummy address
-  String _activeAddress =
-      '12 Food Street, Metro City'; // Default active address
+  List<LocationDetails> _addresses = [];
+  late LocationDetails _activeAddress;
   bool _isLoading = true;
+
+  // Define the dummy address as a constant
+  static final LocationDetails _dummyAddress = LocationDetails(
+    latitude: 1234,
+    longitude: 5678,
+    address: '123 Dummy Address',
+    street: '123 Dummy Address',
+    city: 'City',
+    country: 'Country',
+  );
 
   @override
   void initState() {
@@ -29,45 +40,81 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
       try {
         DocumentSnapshot doc =
             await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
+        if (doc.exists && doc['addresses'] != null) {
           setState(() {
-            // Safely handle the 'addresses' field; use default if it doesn't exist
             _addresses =
-                doc['addresses'] != null
-                    ? List<String>.from(doc['addresses'])
-                    : ['12 Food Street, Metro City'];
-            // Safely handle the 'activeAddress' field; use default if it doesn't exist
-            _activeAddress = doc['activeAddress'] ?? _addresses[0];
+                (doc['addresses'] as List)
+                    .map(
+                      (addr) => LocationDetails(
+                        latitude: addr['latitude'],
+                        longitude: addr['longitude'],
+                        address: addr['address'],
+                        street: addr['street'],
+                        city: addr['city'],
+                        country: addr['country'],
+                      ),
+                    )
+                    .toList();
+            var active = doc['activeAddress'];
+            _activeAddress = LocationDetails(
+              latitude: active['latitude'],
+              longitude: active['longitude'],
+              address: active['address'],
+              street: active['street'],
+              city: active['city'],
+              country: active['country'],
+            );
+            // Ensure dummy address is included if not already present
+            if (!_addresses.any((addr) => _isDummyAddress(addr))) {
+              _addresses.add(_dummyAddress);
+            }
+            // If active address is invalid or missing, set to dummy
+            if (!_addresses.contains(_activeAddress)) {
+              _activeAddress = _dummyAddress;
+            }
             _isLoading = false;
           });
         } else {
-          // If the document doesn't exist, create it with default values
-          await _firestore.collection('users').doc(user.uid).set(
-            {
-              'addresses': ['12 Food Street, Metro City'],
-              'activeAddress': '12 Food Street, Metro City',
-            },
-            SetOptions(merge: true),
-          ); // Use merge to avoid overwriting other fields
+          // Initialize with dummy address if no data exists
           setState(() {
-            _addresses = ['12 Food Street, Metro City'];
-            _activeAddress = '12 Food Street, Metro City';
+            _addresses = [_dummyAddress];
+            _activeAddress = _dummyAddress;
             _isLoading = false;
           });
+          await _firestore.collection('users').doc(user.uid).set({
+            'addresses': [
+              {
+                'latitude': _dummyAddress.latitude,
+                'longitude': _dummyAddress.longitude,
+                'address': _dummyAddress.address,
+                'street': _dummyAddress.street,
+                'city': _dummyAddress.city,
+                'country': _dummyAddress.country,
+              },
+            ],
+            'activeAddress': {
+              'latitude': _dummyAddress.latitude,
+              'longitude': _dummyAddress.longitude,
+              'address': _dummyAddress.address,
+              'street': _dummyAddress.street,
+              'city': _dummyAddress.city,
+              'country': _dummyAddress.country,
+            },
+          }, SetOptions(merge: true));
         }
       } catch (e) {
-        print('Error loading addresses: $e');
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to load addresses: $e')));
-        // Fallback to local default values in case of error
-        setState(() {
-          _addresses = ['12 Food Street, Metro City'];
-          _activeAddress = '12 Food Street, Metro City';
-          _isLoading = false;
-        });
       }
     }
+  }
+
+  bool _isDummyAddress(LocationDetails address) {
+    return address.latitude == _dummyAddress.latitude &&
+        address.longitude == _dummyAddress.longitude &&
+        address.address == _dummyAddress.address;
   }
 
   Future<void> _addAddress() async {
@@ -77,15 +124,37 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     User? user = _auth.currentUser;
     if (user != null) {
       try {
+        LocationDetails newLocation = LocationDetails(
+          latitude: 0, // Default for manual entry
+          longitude: 0,
+          address: newAddress,
+        );
         setState(() {
-          _addresses.add(newAddress);
-          if (_addresses.length == 1) {
-            _activeAddress = newAddress; // Set first address as active
-          }
+          _addresses.add(newLocation);
+          // Don’t change active address automatically
         });
         await _firestore.collection('users').doc(user.uid).update({
-          'addresses': _addresses,
-          'activeAddress': _activeAddress,
+          'addresses':
+              _addresses
+                  .map(
+                    (addr) => {
+                      'latitude': addr.latitude,
+                      'longitude': addr.longitude,
+                      'address': addr.address,
+                      'street': addr.street,
+                      'city': addr.city,
+                      'country': addr.country,
+                    },
+                  )
+                  .toList(),
+          'activeAddress': {
+            'latitude': _activeAddress.latitude,
+            'longitude': _activeAddress.longitude,
+            'address': _activeAddress.address,
+            'street': _activeAddress.street,
+            'city': _activeAddress.city,
+            'country': _activeAddress.country,
+          },
         });
         _addressController.clear();
       } catch (e) {
@@ -96,22 +165,176 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     }
   }
 
+  Future<void> _addAddressFromMap() async {
+    final LocationDetails? selectedLocation = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => MapAddressPickerScreen()),
+    );
+
+    if (selectedLocation != null) {
+      User? user = _auth.currentUser;
+      if (user != null) {
+        try {
+          setState(() {
+            _addresses.add(selectedLocation);
+            // Don’t change active address automatically
+          });
+          await _firestore.collection('users').doc(user.uid).update({
+            'addresses':
+                _addresses
+                    .map(
+                      (addr) => {
+                        'latitude': addr.latitude,
+                        'longitude': addr.longitude,
+                        'address': addr.address,
+                        'street': addr.street,
+                        'city': addr.city,
+                        'country': addr.country,
+                      },
+                    )
+                    .toList(),
+            'activeAddress': {
+              'latitude': _activeAddress.latitude,
+              'longitude': _activeAddress.longitude,
+              'address': _activeAddress.address,
+              'street': _activeAddress.street,
+              'city': _activeAddress.city,
+              'country': _activeAddress.country,
+            },
+          });
+        } catch (e) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to add address: $e')));
+        }
+      }
+    }
+  }
+
+  void _showEditDialog(int index) {
+    if (_isDummyAddress(_addresses[index]))
+      return; // Prevent editing dummy address
+
+    final editController = TextEditingController(
+      text: _addresses[index].address,
+    );
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Edit Address'),
+            content: TextField(controller: editController),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  User? user = _auth.currentUser;
+                  if (user != null) {
+                    setState(() {
+                      if (_activeAddress == _addresses[index]) {
+                        _activeAddress = LocationDetails(
+                          latitude: _activeAddress.latitude,
+                          longitude: _activeAddress.longitude,
+                          address: editController.text,
+                          street: _activeAddress.street,
+                          city: _activeAddress.city,
+                          country: _activeAddress.country,
+                        );
+                      }
+                      _addresses[index] = LocationDetails(
+                        latitude: _addresses[index].latitude,
+                        longitude: _addresses[index].longitude,
+                        address: editController.text,
+                        street: _addresses[index].street,
+                        city: _addresses[index].city,
+                        country: _addresses[index].country,
+                      );
+                    });
+                    await _firestore.collection('users').doc(user.uid).update({
+                      'addresses':
+                          _addresses
+                              .map(
+                                (addr) => {
+                                  'latitude': addr.latitude,
+                                  'longitude': addr.longitude,
+                                  'address': addr.address,
+                                  'street': addr.street,
+                                  'city': addr.city,
+                                  'country': addr.country,
+                                },
+                              )
+                              .toList(),
+                      'activeAddress': {
+                        'latitude': _activeAddress.latitude,
+                        'longitude': _activeAddress.longitude,
+                        'address': _activeAddress.address,
+                        'street': _activeAddress.street,
+                        'city': _activeAddress.city,
+                        'country': _activeAddress.country,
+                      },
+                    });
+                    Navigator.pop(context);
+                  }
+                },
+                child: Text('Save'),
+              ),
+            ],
+          ),
+    );
+  }
+
   Future<void> _deleteAddress(int index) async {
+    if (_isDummyAddress(_addresses[index]))
+      return; // Prevent deleting dummy address
+
     User? user = _auth.currentUser;
     if (user != null) {
       try {
         setState(() {
-          String removedAddress = _addresses.removeAt(index);
-          if (_activeAddress == removedAddress) {
-            _activeAddress =
-                _addresses.isNotEmpty
-                    ? _addresses[0]
-                    : ''; // Set new active address or empty if no addresses left
+          bool wasActive = _activeAddress == _addresses[index];
+          _addresses.removeAt(index);
+          if (wasActive) {
+            // Check for other non-dummy addresses
+            final nonDummyAddresses =
+                _addresses.where((addr) => !_isDummyAddress(addr)).toList();
+            if (nonDummyAddresses.isNotEmpty) {
+              // Set the first non-dummy address as active
+              _activeAddress = nonDummyAddresses.first;
+            } else {
+              // If no non-dummy addresses, set to dummy
+              _activeAddress = _dummyAddress;
+            }
+          }
+          // Ensure dummy address is always present
+          if (!_addresses.any((addr) => _isDummyAddress(addr))) {
+            _addresses.add(_dummyAddress);
           }
         });
         await _firestore.collection('users').doc(user.uid).update({
-          'addresses': _addresses,
-          'activeAddress': _activeAddress,
+          'addresses':
+              _addresses
+                  .map(
+                    (addr) => {
+                      'latitude': addr.latitude,
+                      'longitude': addr.longitude,
+                      'address': addr.address,
+                      'street': addr.street,
+                      'city': addr.city,
+                      'country': addr.country,
+                    },
+                  )
+                  .toList(),
+          'activeAddress': {
+            'latitude': _activeAddress.latitude,
+            'longitude': _activeAddress.longitude,
+            'address': _activeAddress.address,
+            'street': _activeAddress.street,
+            'city': _activeAddress.city,
+            'country': _activeAddress.country,
+          },
         });
       } catch (e) {
         ScaffoldMessenger.of(
@@ -121,13 +344,20 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     }
   }
 
-  Future<void> _setActiveAddress(String address) async {
+  Future<void> _setActiveAddress(LocationDetails address) async {
     User? user = _auth.currentUser;
     if (user != null) {
       try {
         setState(() => _activeAddress = address);
         await _firestore.collection('users').doc(user.uid).update({
-          'activeAddress': _activeAddress,
+          'activeAddress': {
+            'latitude': _activeAddress.latitude,
+            'longitude': _activeAddress.longitude,
+            'address': _activeAddress.address,
+            'street': _activeAddress.street,
+            'city': _activeAddress.city,
+            'country': _activeAddress.country,
+          },
         });
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -135,61 +365,6 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
         );
       }
     }
-  }
-
-  Future<void> _editAddress(int index, String newAddress) async {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      try {
-        setState(() {
-          _addresses[index] = newAddress;
-          if (_activeAddress == _addresses[index]) {
-            _activeAddress = newAddress; // Update active address if edited
-          }
-        });
-        await _firestore.collection('users').doc(user.uid).update({
-          'addresses': _addresses,
-          'activeAddress': _activeAddress,
-        });
-      } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to edit address: $e')));
-      }
-    }
-  }
-
-  void _showEditDialog(int index) {
-    final TextEditingController editController = TextEditingController(
-      text: _addresses[index],
-    );
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Edit Address'),
-            content: TextField(
-              controller: editController,
-              decoration: InputDecoration(hintText: 'Enter new address'),
-            ),
-            actions: [
-              TextButton(
-                child: Text('Cancel'),
-                onPressed: () => Navigator.pop(context),
-              ),
-              ElevatedButton(
-                child: Text('Save'),
-                onPressed: () {
-                  if (editController.text.trim().isNotEmpty) {
-                    _editAddress(index, editController.text.trim());
-                    Navigator.pop(context);
-                  }
-                },
-              ),
-            ],
-          ),
-    );
   }
 
   @override
@@ -214,28 +389,48 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                       ),
                     ),
                     SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: _addAddressFromMap,
+                      child: Text('Add Address from Map'),
+                    ),
+                    SizedBox(height: 20),
                     Expanded(
                       child: ListView.builder(
                         itemCount: _addresses.length,
                         itemBuilder: (context, index) {
                           final address = _addresses[index];
+                          final isDummy = _isDummyAddress(address);
                           return Card(
                             elevation: 2,
-                            margin: EdgeInsets.only(
-                              bottom: 10,
-                            ), // Fixed to 'bottom'
+                            margin: EdgeInsets.only(bottom: 10),
                             child: ListTile(
-                              title: Text(address),
+                              title: Text(address.toString()),
+                              subtitle: Text(
+                                'Lat: ${address.latitude}, Lng: ${address.longitude}${address.city != null ? ', ${address.city}' : ''}${address.country != null ? ', ${address.country}' : ''}',
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: Icon(Icons.edit, color: Colors.blue),
-                                    onPressed: () => _showEditDialog(index),
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color:
+                                          isDummy ? Colors.grey : Colors.blue,
+                                    ),
+                                    onPressed:
+                                        isDummy
+                                            ? null
+                                            : () => _showEditDialog(index),
                                   ),
                                   IconButton(
-                                    icon: Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () => _deleteAddress(index),
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: isDummy ? Colors.grey : Colors.red,
+                                    ),
+                                    onPressed:
+                                        isDummy
+                                            ? null
+                                            : () => _deleteAddress(index),
                                   ),
                                   IconButton(
                                     icon: Icon(
