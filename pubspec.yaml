@@ -48,6 +48,8 @@ dependencies:
   url_launcher: ^6.3.1
   carousel_slider: ^5.0.0
 
+
+
   flip_card: ^0.7.0
 
   flutter_native_splash: ^2.4.5
@@ -55,12 +57,15 @@ dependencies:
   flutter_secure_storage: ^9.0.0
 
   google_fonts: ^6.2.1
+  flutter_bounce: ^1.1.0
+  iconsax: ^0.0.8
 
   flutter_map: ^8.1.0
   latlong2: ^0.9.1
   geolocator: ^13.0.2
   geocoding: ^3.0.0
   google_maps_flutter: ^2.5.0
+  hidden_drawer_menu: 3.0.1
 
 dev_dependencies:
   flutter_test:

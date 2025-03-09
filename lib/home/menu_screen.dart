@@ -346,8 +346,14 @@ class _MenuScreenState extends State<MenuScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Menu Timeline'),
-        backgroundColor: Colors.blue,
+        title: Text(
+          'Menu',
+          style: TextStyle(
+            color: Colors.blue[900],
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
         centerTitle: true,
       ),
       body: Column(
