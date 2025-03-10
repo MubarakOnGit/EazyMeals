@@ -1,12 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:url_launcher/url_launcher.dart';
 import '../screens/login_screen.dart';
+import '../screens/subscription_screen.dart';
 import 'address_management_screen.dart';
 import 'student_verification_survey.dart';
 import 'feedback_dialog.dart';
-import 'meal_preferences_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -14,27 +18,20 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final List<String> profilePics = [
-    'assets/images/on1.png',
-    'assets/images/on3.png',
-    'assets/images/on1.png',
-    'assets/images/on2.png',
-    'assets/images/on1.png',
-  ];
-  int selectedPicIndex = 0;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController nameController = TextEditingController();
   String activeAddress = '12 Food Street, Metro City'; // Dummy address
   String userName = '';
-  final PageController _pageController = PageController();
   bool _isLoading = true;
   bool _isVerified = false;
+  File? _profileImage; // Store the local image file
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadLocalProfileImage(); // Load the image from local storage on init
   }
 
   Future<void> _loadUserData() async {
@@ -47,15 +44,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           setState(() {
             userName = doc['name'] ?? 'User';
             nameController.text = userName;
-            selectedPicIndex = doc['profilePicIndex'] ?? 0;
             _isVerified = doc['studentDetails']?['isVerified'] ?? false;
             activeAddress =
                 doc['activeAddress'] ?? '12 Food Street, Metro City';
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_pageController.hasClients) {
-              _pageController.jumpToPage(selectedPicIndex);
-            }
           });
         }
       } catch (e) {
@@ -68,26 +59,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _updateProfilePic(int index) async {
-    setState(() => selectedPicIndex = index);
-    User? user = _auth.currentUser;
-    if (user != null) {
-      try {
-        await _firestore.collection('users').doc(user.uid).update({
-          'profilePicIndex': index,
+  // Load the profile image from local storage
+  Future<void> _loadLocalProfileImage() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final imagePath = '${directory.path}/profile_image.jpg';
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() {
+          _profileImage = file;
         });
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update profile picture: $e')),
-        );
       }
+    } catch (e) {
+      print('Error loading local image: $e');
+    }
+  }
+
+  // Pick an image from the gallery and save it locally
+  Future<void> _pickProfileImage() async {
+    final picker = ImagePicker();
+    try {
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        final directory = await getApplicationDocumentsDirectory();
+        final imagePath = '${directory.path}/profile_image.jpg';
+        final file = File(pickedFile.path);
+        await file.copy(imagePath);
+        setState(() {
+          _profileImage = File(imagePath);
+        });
+      } else {
+        print('No image selected');
+      }
+    } on PlatformException catch (e) {
+      print('PlatformException picking image: ${e.message}, code: ${e.code}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: ${e.message}')),
+      );
+    } catch (e) {
+      print('Unexpected error picking image: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unexpected error: $e')));
     }
   }
 
   void _navigateToMealPreferences() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => MealPreferencesScreen()),
+      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
     );
   }
 
@@ -160,7 +180,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ElevatedButton(
                 child: Text('Save'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
+                  backgroundColor:
+                      Colors.blue.shade900, // Updated to blue shade 900
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -199,12 +220,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? Center(child: CircularProgressIndicator())
               : Column(
                 children: [
-                  // Header Section
+                  // Header Section with updated gradient
                   Container(
                     height: 320,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.deepPurple, Colors.purpleAccent],
+                        colors: [
+                          Colors.blue.shade900,
+                          Colors.blue.shade700,
+                        ], // Updated gradient
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -217,60 +241,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        SizedBox(
-                          height: 130,
-                          width: MediaQuery.of(context).size.width,
-                          child: GestureDetector(
-                            onHorizontalDragUpdate: (details) {
-                              if (details.delta.dx > 0 &&
-                                  selectedPicIndex > 0) {
-                                _pageController.previousPage(
-                                  duration: Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              } else if (details.delta.dx < 0 &&
-                                  selectedPicIndex < profilePics.length - 1) {
-                                _pageController.nextPage(
-                                  duration: Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              }
-                            },
-                            child: PageView.builder(
-                              controller: _pageController,
-                              itemCount: profilePics.length,
-                              onPageChanged:
-                                  (index) => _updateProfilePic(index),
-                              itemBuilder: (context, index) {
-                                return Center(
-                                  child: CircleAvatar(
-                                    radius: 60,
-                                    backgroundImage: AssetImage(
-                                      profilePics[index],
-                                    ),
-                                  ),
-                                );
-                              },
+                        GestureDetector(
+                          onTap: _pickProfileImage, // Tap to pick a new image
+                          child: CircleAvatar(
+                            radius: 60,
+                            backgroundImage:
+                                _profileImage != null
+                                    ? FileImage(_profileImage!)
+                                    : AssetImage('assets/images/on1.png')
+                                        as ImageProvider, // Default image
+                            child: Align(
+                              alignment: Alignment.bottomRight,
+                              child: Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
-                        ),
-                        SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(profilePics.length, (index) {
-                            return Container(
-                              width: 8,
-                              height: 8,
-                              margin: EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color:
-                                    selectedPicIndex == index
-                                        ? Colors.white
-                                        : Colors.white.withOpacity(0.4),
-                              ),
-                            );
-                          }),
                         ),
                         SizedBox(height: 12),
                         Row(
@@ -311,21 +299,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ProfileSectionCard(
                             icon: Icons.location_on,
                             title: 'Address',
-                            subtitle:
-                                activeAddress, // Display the active address
-                            trailing: Icon(Icons.edit, color: Colors.purple),
+                            subtitle: activeAddress,
+                            trailing: Icon(
+                              Icons.edit,
+                              color: Colors.blue.shade900,
+                            ), // Updated icon color
                             onTap: () {
-                              // Navigate to AddressManagementScreen
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
                                       (context) => AddressManagementScreen(),
                                 ),
-                              ).then((_) {
-                                // Refresh the profile screen when returning from AddressManagementScreen
-                                _loadUserData();
-                              });
+                              ).then((_) => _loadUserData());
                             },
                           ),
                           ProfileSectionCard(
@@ -384,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.purple,
+                    color: Colors.blue.shade900, // Updated text color
                   ),
                 ),
                 SizedBox(height: 20),
@@ -412,10 +398,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.purple.withOpacity(0.1),
+        color: Colors.blue.shade900.withOpacity(
+          0.1,
+        ), // Updated background color
       ),
       child: IconButton(
-        icon: Icon(icon, color: Colors.purple),
+        icon: Icon(icon, color: Colors.blue.shade900), // Updated icon color
         onPressed: () async {
           try {
             await launchUrl(Uri.parse(url));
@@ -452,7 +440,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ElevatedButton(
                 child: Text('Save'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
+                  backgroundColor:
+                      Colors.blue.shade900, // Updated to blue shade 900
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -503,18 +492,18 @@ class ProfileSectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
-      margin: EdgeInsets.only(
-        bottom: 10,
-      ), // Fixed typo: 'bottom' instead of 'custom'
+      margin: EdgeInsets.only(bottom: 10), // Note: 'custom' should be 'bottom'
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: ListTile(
         leading: Container(
           padding: EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.purple.withOpacity(0.1),
+            color: Colors.blue.shade900.withOpacity(
+              0.1,
+            ), // Updated background color
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: Colors.purple),
+          child: Icon(icon, color: Colors.blue.shade900), // Updated icon color
         ),
         title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle, style: TextStyle(color: Colors.grey[600])),

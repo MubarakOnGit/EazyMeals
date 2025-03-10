@@ -90,7 +90,6 @@ class _ManagerMenuScreenState extends State<ManagerMenuScreen> {
 
     if (!_editMode[key]! && itemController.text.isNotEmpty) {
       final imageUrl = imageUrlController.text.trim();
-      // Basic validation for image URL
       if (imageUrl.isNotEmpty &&
           !RegExp(
             r'\.(jpg|jpeg|png|gif|bmp)$',
@@ -204,8 +203,20 @@ class _ManagerMenuScreenState extends State<ManagerMenuScreen> {
                       .orderBy('weekNumber')
                       .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  print('Stream error: ${snapshot.error}');
+                  return Center(
+                    child: Text('Error loading menus: ${snapshot.error}'),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data == null) {
+                  print('No menu data available');
+                  return Center(child: Text('No menus available'));
+                }
+
                 final menus =
                     snapshot.data!.docs.map((doc) {
                       final data = doc.data() as Map<String, dynamic>;

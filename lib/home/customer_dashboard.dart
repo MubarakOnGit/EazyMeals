@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Import the HomeScreen
-import 'menu_screen.dart';
-import 'profile_screen.dart';
 import 'package:iconsax/iconsax.dart';
-import 'history_screen.dart';
+import 'home_screen.dart'; // Adjust path as per your project structure
+import 'menu_screen.dart'; // Adjust path as per your project structure
+import 'history_screen.dart'; // Adjust path as per your project structure
+import 'profile_screen.dart'; // Adjust path as per your project structure
 
 class CustomerDashboard extends StatefulWidget {
   @override
@@ -14,7 +14,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    HomeScreen(), // HomeScreen is the first screen
+    HomeScreen(),
     MenuScreen(),
     HistoryScreen(),
     ProfileScreen(),
@@ -24,10 +24,10 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: _screens[_currentIndex], // Display the selected screen
+      body: _screens[_currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white, // Background color of the bar
+          color: Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(25),
             topRight: Radius.circular(25),

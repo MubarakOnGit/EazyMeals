@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart'; // For generating unique subscription IDs
 
 class CustomersScreen extends StatefulWidget {
   @override
@@ -8,6 +9,7 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Uuid _uuid = Uuid(); // For generating unique subscription IDs
 
   @override
   Widget build(BuildContext context) {
@@ -20,11 +22,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream: _firestore.collection('users').snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData)
             return Center(child: CircularProgressIndicator());
-          }
           final users = snapshot.data!.docs;
-
           if (users.isEmpty) {
             return Center(
               child: Text(
@@ -167,9 +167,36 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  await _activateSubscription(userId, category, mealType, plan);
-                  Navigator.pop(context); // Close confirmation
-                  Navigator.pop(context); // Close activation dialog
+                  try {
+                    DocumentSnapshot userDoc =
+                        await _firestore.collection('users').doc(userId).get();
+                    final userData =
+                        userDoc.data() as Map<String, dynamic>? ?? {};
+                    String? pendingOrderId =
+                        userData['pendingOrderId'] as String?;
+
+                    await _activateSubscription(
+                      userId,
+                      category,
+                      mealType,
+                      plan,
+                      pendingOrderId: pendingOrderId,
+                    );
+                    Navigator.pop(context); // Close confirmation
+                    Navigator.pop(context); // Close activation dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Subscription activated successfully'),
+                      ),
+                    );
+                  } catch (e) {
+                    print('Error activating subscription: $e');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to activate subscription: $e'),
+                      ),
+                    );
+                  }
                 },
                 child: Text('Yes'),
               ),
@@ -182,9 +209,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
     String userId,
     String category,
     String mealType,
-    String plan,
-  ) async {
-    final now = DateTime.now(); // Exact approval time
+    String plan, {
+    String? pendingOrderId,
+  }) async {
+    final now = DateTime.now();
     int durationDays;
     switch (plan) {
       case '1 Week':
@@ -200,35 +228,58 @@ class _CustomersScreenState extends State<CustomersScreen> {
         durationDays = 7;
     }
 
-    DateTime startDate = now; // Start at approval time
-    DateTime endDate = startDate.add(
-      Duration(days: durationDays),
-    ); // Exact 7, 21, or 28 days
+    DateTime startDate = now;
+    DateTime endDate = startDate.add(Duration(days: durationDays));
+    String subscriptionId = _uuid.v4();
 
-    // Activate subscription
-    await _firestore.collection('users').doc(userId).update({
-      'activeSubscription': true,
-      'subscriptionPlan': plan,
-      'category': category,
-      'mealType': mealType,
-      'subscriptionStartDate': Timestamp.fromDate(startDate),
-      'subscriptionEndDate': Timestamp.fromDate(endDate),
-      'isPaused': false,
-    });
+    await _firestore.runTransaction((transaction) async {
+      DocumentReference userRef = _firestore.collection('users').doc(userId);
 
-    // Generate daily orders
-    for (int i = 0; i < durationDays; i++) {
-      DateTime orderDate = startDate.add(Duration(days: i));
-      await _firestore.collection('orders').add({
-        'userId': userId,
+      transaction.set(userRef, {
+        'activeSubscription': true,
+        'subscriptionId': subscriptionId,
+        'subscriptionPlan': plan,
         'category': category,
         'mealType': mealType,
-        'date': Timestamp.fromDate(orderDate),
-        'status': 'Pending Delivery',
-      });
-    }
+        'subscriptionStartDate': Timestamp.fromDate(startDate),
+        'subscriptionEndDate': Timestamp.fromDate(endDate),
+        'isPaused': false,
+        'pausedAt': null,
+        'pendingOrderId': FieldValue.delete(), // Clear pending ID
+      }, SetOptions(merge: true));
+
+      final batch = _firestore.batch();
+      for (int i = 0; i < durationDays; i++) {
+        DateTime orderDate = startDate.add(Duration(days: i));
+        DocumentReference orderRef = _firestore.collection('orders').doc();
+        batch.set(orderRef, {
+          'userId': userId,
+          'subscriptionId': subscriptionId,
+          'category': category,
+          'mealType': mealType,
+          'date': Timestamp.fromDate(orderDate),
+          'status': 'Pending Delivery',
+        });
+      }
+      await batch.commit();
+
+      // Mark pending order as completed if provided
+      if (pendingOrderId != null) {
+        DocumentReference pendingOrderRef = _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('pendingOrders')
+            .doc(pendingOrderId);
+        transaction.update(pendingOrderRef, {
+          'status': 'Completed',
+          'subscriptionId': subscriptionId,
+          'activatedAt': Timestamp.now(),
+        });
+      }
+    });
+
     print(
-      'Orders generated for $userId: $durationDays days, Start: $startDate, End: $endDate',
+      'Subscription activated for $userId: $plan, ID: $subscriptionId, Start: $startDate, End: $endDate, Orders: $durationDays',
     );
   }
 
@@ -259,13 +310,43 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _deactivateSubscription(String userId) async {
-    await _firestore.collection('users').doc(userId).update({
-      'activeSubscription': false,
-      'isPaused': FieldValue.delete(),
-      'pausedAt': FieldValue.delete(),
-    });
-    await _cancelRemainingOrders(userId);
-    print('Subscription deactivated for $userId');
+    DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(userId).get();
+    final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+
+    if (userData['activeSubscription'] == true) {
+      String subscriptionId = userData['subscriptionId'] as String? ?? '';
+
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('pastSubscriptions')
+          .add({
+            'subscriptionId': subscriptionId,
+            'subscriptionPlan': userData['subscriptionPlan'],
+            'category': userData['category'],
+            'mealType': userData['mealType'],
+            'subscriptionStartDate': userData['subscriptionStartDate'],
+            'subscriptionEndDate': Timestamp.now(),
+            'status': 'Cancelled',
+            'cancelledAt': Timestamp.now(),
+          });
+
+      await _firestore.collection('users').doc(userId).update({
+        'activeSubscription': false,
+        'subscriptionId': FieldValue.delete(),
+        'subscriptionPlan': FieldValue.delete(),
+        'subscriptionStartDate': FieldValue.delete(),
+        'subscriptionEndDate': FieldValue.delete(),
+        'isPaused': FieldValue.delete(),
+        'pausedAt': FieldValue.delete(),
+      });
+
+      await _cancelRemainingOrders(userId, subscriptionId);
+      print(
+        'Subscription cancelled and archived for $userId, ID: $subscriptionId',
+      );
+    }
   }
 
   void _togglePausePlay(String userId, bool isPaused) {
@@ -344,10 +425,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
       59,
     );
 
+    DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(userId).get();
+    final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+    String subscriptionId = userData['subscriptionId'] as String? ?? '';
+
     QuerySnapshot orders =
         await _firestore
             .collection('orders')
             .where('userId', isEqualTo: userId)
+            .where('subscriptionId', isEqualTo: subscriptionId)
             .where('status', isEqualTo: 'Pending Delivery')
             .where(
               'date',
@@ -381,10 +468,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
       59,
     );
 
+    DocumentSnapshot userDoc =
+        await _firestore.collection('users').doc(userId).get();
+    final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+    String subscriptionId = userData['subscriptionId'] as String? ?? '';
+
     QuerySnapshot orders =
         await _firestore
             .collection('orders')
             .where('userId', isEqualTo: userId)
+            .where('subscriptionId', isEqualTo: subscriptionId)
             .where('status', isEqualTo: 'Paused')
             .where(
               'date',
@@ -399,11 +492,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
-  Future<void> _cancelRemainingOrders(String userId) async {
+  Future<void> _cancelRemainingOrders(
+    String userId,
+    String subscriptionId,
+  ) async {
     QuerySnapshot orders =
         await _firestore
             .collection('orders')
             .where('userId', isEqualTo: userId)
+            .where('subscriptionId', isEqualTo: subscriptionId)
             .where('status', isEqualTo: 'Pending Delivery')
             .get();
 

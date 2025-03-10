@@ -1,13 +1,11 @@
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
-import 'package:hidden_drawer_menu/hidden_drawer_menu.dart';
 import 'package:iconsax/iconsax.dart';
-import '../controllers/banner_controller.dart';
-import 'employee_login_screen.dart';
-import 'menu_screen.dart';
+import '../controllers/banner_controller.dart'; // Adjust path as per your project structure
+import 'employee_login_screen.dart'; // Adjust path as per your project structure
+import 'menu_screen.dart'; // Adjust path as per your project structure
 
 class HomeScreen extends StatelessWidget {
   final BannerController bannerController = Get.put(BannerController());
@@ -16,26 +14,6 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     RxBool isSwitched = false.obs;
     RxBool isChecked = false.obs;
-
-    List<Map<String, dynamic>> categories = [
-      {
-        'title': 'North Indian',
-        'description':
-            'Savor the rich flavors of North India with our authentic curries and tandoori dishes',
-        'image': 'assets/pic1.png',
-      },
-      {
-        'title': 'South Indian',
-        'description':
-            'Enjoy traditional South Indian delicacies like dosas, idlis, and sambar',
-        'image': 'assets/pic1.png',
-      },
-      {
-        'title': 'Veg',
-        'description': 'Fresh and healthy vegetarian options for every meal',
-        'image': 'assets/pic.png',
-      },
-    ];
 
     List<Map<String, dynamic>> items = [
       {
@@ -82,8 +60,6 @@ class HomeScreen extends StatelessWidget {
               }
               return null;
             }),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity(horizontal: 0, vertical: 0),
           ),
         ),
       },
@@ -151,11 +127,14 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.menu, color: Colors.blue[900]),
-          onPressed: () {
-            Scaffold.of(context).openDrawer(); // Opens the drawer
-          },
+        leading: Builder(
+          builder:
+              (context) => IconButton(
+                icon: Icon(Icons.menu, color: Colors.blue[900]),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              ),
         ),
         title: Center(
           child: Text(
@@ -175,6 +154,48 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blueGrey.shade900),
+              child: Text(
+                'Menu',
+                style: TextStyle(color: Colors.white, fontSize: 24),
+              ),
+            ),
+            ListTile(
+              title: Text('Home'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer
+              },
+            ),
+            ListTile(
+              title: Text('Menu'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => MenuScreen()),
+                );
+              },
+            ),
+            ListTile(
+              title: Text('Employee Login'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmployeeLoginScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -239,7 +260,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Text(
@@ -397,100 +417,6 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class HiddenDrawer extends StatefulWidget {
-  @override
-  _HiddenDrawerState createState() => _HiddenDrawerState();
-}
-
-class _HiddenDrawerState extends State<HiddenDrawer> {
-  List<ScreenHiddenDrawer> _pages = [];
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Define the screens for the drawer
-    _pages = [
-      ScreenHiddenDrawer(
-        ItemHiddenMenu(
-          name: "Home",
-          baseStyle: TextStyle(color: Colors.white, fontSize: 20),
-          selectedStyle: TextStyle(color: Colors.yellow, fontSize: 20),
-        ),
-        HomeScreen(),
-      ),
-      ScreenHiddenDrawer(
-        ItemHiddenMenu(
-          name: "Menu",
-          baseStyle: TextStyle(color: Colors.white, fontSize: 20),
-          selectedStyle: TextStyle(color: Colors.yellow, fontSize: 20),
-        ),
-        MenuScreen(),
-      ),
-      ScreenHiddenDrawer(
-        ItemHiddenMenu(
-          name: "Employee Login",
-          baseStyle: TextStyle(color: Colors.white, fontSize: 20),
-          selectedStyle: TextStyle(color: Colors.yellow, fontSize: 20),
-        ),
-        EmployeeLoginScreen(),
-      ),
-      ScreenHiddenDrawer(
-        ItemHiddenMenu(
-          name: "Settings",
-          baseStyle: TextStyle(color: Colors.white, fontSize: 20),
-          selectedStyle: TextStyle(color: Colors.yellow, fontSize: 20),
-        ),
-        SettingsScreen(),
-      ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return HiddenDrawerMenu(
-      screens: _pages,
-      backgroundColorMenu: Colors.blueGrey.shade900, // Menu background color
-      initPositionSelected: 0, // Start with "Home" selected
-      slidePercent: 60.0, // How much the drawer slides
-      contentCornerRadius: 20.0, // Corner radius of the main content
-      enableShadowItensMenu: true, // Add shadow to menu items
-      enableScaleAnimation: true, // Enable scale animation
-      enableCornerAnimation: true, // Enable corner animation
-    );
-  }
-}
-
-class EmployeeLoginScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Text(
-          "Employee Login Page",
-          style: TextStyle(fontSize: 30, color: Colors.black),
-        ),
-      ),
-    );
-  }
-}
-
-class SettingsScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Text(
-          "Settings Page",
-          style: TextStyle(fontSize: 30, color: Colors.black),
         ),
       ),
     );

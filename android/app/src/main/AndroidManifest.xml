@@ -1,7 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.eazy_meals">
 
-    <!-- Permissions should be here, right after the manifest tag -->
+    <!-- Permissions for image_picker -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Declare camera as an optional feature -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Existing location permissions (kept as-is) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
