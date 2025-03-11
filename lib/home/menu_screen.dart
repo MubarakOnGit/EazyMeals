@@ -20,7 +20,7 @@ class _MenuScreenState extends State<MenuScreen> {
   final FlutterSecureStorage _storage = FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
   DateTime _currentDate = DateTime.now();
-  int _currentDayIndex = 7; // Default to today
+  int _currentDayIndex = 7;
   final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
   bool _activeSubscription = false;
   String? _subscriptionPlan;
@@ -37,7 +37,7 @@ class _MenuScreenState extends State<MenuScreen> {
     'South Indian': false,
     'North Indian': false,
   };
-  Map<String, bool> _shouldAnimateText = {}; // Control animation per category
+  Map<String, Map<String, dynamic>> _menuCache = {};
 
   @override
   void initState() {
@@ -46,52 +46,53 @@ class _MenuScreenState extends State<MenuScreen> {
     _schedulePauseCheck();
     _loadInitialState();
     dates = _generateDates();
-    _initializeAnimationState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollController.jumpTo(itemWidth * (_currentDayIndex - 2));
+      _fetchMenuData();
     });
 
-    _scrollController.addListener(() {
-      final offset = _scrollController.offset;
-      final viewportWidth = MediaQuery.of(context).size.width;
-      final centerOffset = offset + (viewportWidth / 2) - (itemWidth / 2);
-      final newIndex = (centerOffset / itemWidth).round().clamp(
-        0,
-        dates.length - 1,
-      );
-      if (newIndex != _currentDayIndex) {
-        setState(() {
-          _currentDayIndex = newIndex;
-          _currentDate = DateTime.now()
-              .subtract(Duration(days: 7))
-              .add(Duration(days: _currentDayIndex));
-          _triggerTextAnimation(); // Trigger animation only on day change
-        });
-      }
-    });
+    _scrollController.addListener(_handleScroll);
   }
 
-  void _initializeAnimationState() {
-    for (var category in _categories) {
-      _shouldAnimateText[category] = false; // Start with no animation
+  void _handleScroll() {
+    final offset = _scrollController.offset;
+    final viewportWidth = MediaQuery.of(context).size.width;
+    final centerOffset = offset + (viewportWidth / 2) - (itemWidth / 2);
+    final newIndex = (centerOffset / itemWidth).round().clamp(
+      0,
+      dates.length - 1,
+    );
+
+    if (newIndex != _currentDayIndex) {
+      setState(() {
+        _currentDayIndex = newIndex;
+        _currentDate = DateTime.now()
+            .subtract(Duration(days: 7))
+            .add(Duration(days: _currentDayIndex));
+        _fetchMenuData();
+      });
     }
   }
 
-  void _triggerTextAnimation() {
-    setState(() {
-      for (var category in _categories) {
-        _shouldAnimateText[category] = true; // Trigger animation
-      }
-    });
-    Future.delayed(Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          for (var category in _categories) {
-            _shouldAnimateText[category] = false; // End animation
-          }
-        });
-      }
-    });
+  Future<void> _fetchMenuData() async {
+    _menuCache.clear();
+    for (String category in _categories) {
+      final snapshot =
+          await _firestore
+              .collection('menus')
+              .where('category', isEqualTo: category)
+              .where(
+                'weekNumber',
+                isEqualTo: _currentDate.weekOfYearForMenuScreen,
+              )
+              .get();
+      final menus =
+          snapshot.docs
+              .map((doc) => doc.data() as Map<String, dynamic>)
+              .toList();
+      _menuCache[category] = menus.isNotEmpty ? menus[0] : {'items': []};
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -118,19 +119,19 @@ class _MenuScreenState extends State<MenuScreen> {
   String _getWeekday(int weekday) {
     switch (weekday) {
       case 1:
-        return 'Mon';
+        return 'Monday';
       case 2:
-        return 'Tue';
+        return 'Tuesday';
       case 3:
-        return 'Wed';
+        return 'Wednesday';
       case 4:
-        return 'Thu';
+        return 'Thursday';
       case 5:
-        return 'Fri';
+        return 'Friday';
       case 6:
-        return 'Sat';
+        return 'Saturday';
       case 7:
-        return 'Sun';
+        return 'Sunday';
       default:
         return '';
     }
@@ -143,7 +144,6 @@ class _MenuScreenState extends State<MenuScreen> {
           await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
-        print('User data loaded: $data');
         setState(() {
           _activeSubscription = data['activeSubscription'] ?? false;
           _subscriptionPlan = data['subscriptionPlan'];
@@ -166,8 +166,6 @@ class _MenuScreenState extends State<MenuScreen> {
             if (_remainingSeconds > 0 && !_isPaused) _startTimer();
           }
         });
-      } else {
-        print('No user document found for ${user.uid}');
       }
     }
   }
@@ -248,7 +246,6 @@ class _MenuScreenState extends State<MenuScreen> {
           _activeSubscription = false;
           _timer?.cancel();
         });
-        print('Subscription ended naturally and archived for ${user.uid}');
       }
     }
   }
@@ -262,7 +259,10 @@ class _MenuScreenState extends State<MenuScreen> {
 
     Future.delayed(duration, () {
       if (mounted) {
-        setState(() => _currentDate = DateTime.now());
+        setState(() {
+          _currentDate = DateTime.now();
+          _fetchMenuData();
+        });
         _scheduleDailyUpdate();
       }
     });
@@ -520,22 +520,47 @@ class _MenuScreenState extends State<MenuScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildAnimatedDateText(_formatDate(_currentDate)),
+                        Text(
+                          _formatDate(_currentDate),
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 16,
+                          ),
+                        ),
                         SizedBox(height: 2),
-                        _buildAnimatedRelativeText(
+                        Text(
                           _getRelativeDayText(_currentDayIndex),
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage: AssetImage('assets/profile_pic.jpg'),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundImage: AssetImage('assets/profile_pic.jpg'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
               Container(
                 height: 130,
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.2),
+                      spreadRadius: 0,
+                      blurRadius: 0,
+                      offset: Offset(0, 0),
+                    ),
+                  ],
+                ),
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
@@ -549,6 +574,7 @@ class _MenuScreenState extends State<MenuScreen> {
                   },
                 ),
               ),
+              SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16.0,
@@ -647,69 +673,9 @@ class _MenuScreenState extends State<MenuScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children:
-                      _categories.map((category) {
-                        return StreamBuilder<QuerySnapshot>(
-                          stream:
-                              _firestore
-                                  .collection('menus')
-                                  .where('category', isEqualTo: category)
-                                  .where(
-                                    'weekNumber',
-                                    isGreaterThanOrEqualTo:
-                                        _currentDate
-                                            .subtract(Duration(days: 7))
-                                            .weekOfYearForMenuScreen,
-                                  )
-                                  .where(
-                                    'weekNumber',
-                                    isLessThanOrEqualTo:
-                                        _currentDate
-                                            .add(Duration(days: 28))
-                                            .weekOfYearForMenuScreen,
-                                  )
-                                  .orderBy('weekNumber')
-                                  .snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return SizedBox.shrink();
-                            }
-                            if (snapshot.hasError) {
-                              print(
-                                'Error loading menu for $category: ${snapshot.error}',
-                              );
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: Text(
-                                  'Error loading $category menu',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              );
-                            }
-                            if (!snapshot.hasData || snapshot.data == null) {
-                              print('No menu data for $category');
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: _buildCard([], category),
-                              );
-                            }
-                            final menus =
-                                snapshot.data!.docs
-                                    .map(
-                                      (doc) =>
-                                          doc.data() as Map<String, dynamic>,
-                                    )
-                                    .toList();
-                            print(
-                              'Menus loaded for $category: ${menus.length}',
-                            );
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: _buildCard(menus, category),
-                            );
-                          },
-                        );
-                      }).toList(),
+                      _categories
+                          .map((category) => _buildMenuCard(category))
+                          .toList(),
                 ),
               ),
             ],
@@ -719,42 +685,11 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildAnimatedDateText(String text) {
-    return TweenAnimationBuilder(
-      key: ValueKey(text),
-      tween: IntTween(begin: 0, end: text.length),
-      duration: Duration(milliseconds: 500),
-      builder: (context, int value, child) {
-        return Text(
-          text.substring(0, value),
-          style: TextStyle(color: Colors.blue.shade900, fontSize: 16),
-        );
-      },
-    );
-  }
-
-  Widget _buildAnimatedRelativeText(String text) {
-    return TweenAnimationBuilder(
-      key: ValueKey(text),
-      tween: IntTween(begin: 0, end: text.length),
-      duration: Duration(milliseconds: 500),
-      builder: (context, int value, child) {
-        return Text(
-          text.substring(0, value),
-          style: TextStyle(
-            color: Colors.blue.shade900,
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildDateItem(String date, String day, bool isCurrent) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Container(
+        key: ValueKey('date-$date-$day'),
         width: 60,
         decoration: BoxDecoration(
           color: isCurrent ? Colors.blue[900] : Colors.transparent,
@@ -783,7 +718,7 @@ class _MenuScreenState extends State<MenuScreen> {
             ),
             SizedBox(height: 4),
             Text(
-              day,
+              day.substring(0, 3),
               style: TextStyle(
                 fontSize: 14,
                 color: isCurrent ? Colors.white : Colors.black,
@@ -882,7 +817,7 @@ class _MenuScreenState extends State<MenuScreen> {
               () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-              ).then((_) => setState(() {})),
+              ).then((_) => _fetchMenuData()),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blue.shade900,
             shape: RoundedRectangleBorder(
@@ -897,171 +832,267 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildCard(List<Map<String, dynamic>> menus, String category) {
-    bool isExpanded = expandedCards[category] ?? false;
-    final selectedDate = _currentDate
-        .subtract(Duration(days: 7))
-        .add(Duration(days: _currentDayIndex));
-    final menu = menus.firstWhere(
-      (menu) => menu['weekNumber'] == selectedDate.weekOfYearForMenuScreen,
-      orElse: () => {'items': []},
-    );
-    final items = menu['items'] as List<dynamic>? ?? [];
-    final lunchItem = items.firstWhere(
-      (item) =>
-          item['mealType'] == 'Lunch' &&
-          item['day'] == _getWeekday(selectedDate.weekday),
-      orElse: () => {'item': 'No item', 'imageUrl': ''},
-    );
-    final dinnerItem = items.firstWhere(
-      (item) =>
-          item['mealType'] == 'Dinner' &&
-          item['day'] == _getWeekday(selectedDate.weekday),
-      orElse: () => {'item': 'No item', 'imageUrl': ''},
-    );
-
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade900, Colors.blue.shade700],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildMenuCard(String category) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        key: ValueKey('$category-card'),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade900, Colors.blue.shade700],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              spreadRadius: 2,
+              blurRadius: 5,
+              offset: Offset(0, 3),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                category,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              GestureDetector(
-                onTap:
-                    () => setState(() => expandedCards[category] = !isExpanded),
-                child: Icon(
-                  isExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  color: Colors.orange,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          _shouldAnimateText[category]!
-              ? _buildAnimatedMenuText('Lunch: ${lunchItem['item']}', category)
-              : Text(
-                'Lunch: ${lunchItem['item']}',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-          SizedBox(height: 8),
-          _shouldAnimateText[category]!
-              ? _buildAnimatedMenuText(
-                'Dinner: ${dinnerItem['item']}',
-                category,
-              )
-              : Text(
-                'Dinner: ${dinnerItem['item']}',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-          if (isExpanded) ...[
-            SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Lunch Image:',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
-                ),
-                SizedBox(height: 8),
-                FutureBuilder<String?>(
-                  future: _getLocalImagePath(
-                    lunchItem['imageUrl'] ?? '',
-                    'lunch-${selectedDate.weekOfYearForMenuScreen}-$category',
+                  category,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  builder: (context, snapshot) {
-                    return snapshot.data != null
-                        ? Image.file(
-                          File(snapshot.data!),
-                          width: 150,
-                          height: 150,
-                          fit: BoxFit.cover,
-                        )
-                        : Image.asset(
-                          'assets/placeholder.png',
-                          width: 150,
-                          height: 150,
-                          fit: BoxFit.cover,
-                        );
-                  },
                 ),
-                SizedBox(height: 16),
-                Text(
-                  'Dinner Image:',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
-                ),
-                SizedBox(height: 8),
-                FutureBuilder<String?>(
-                  future: _getLocalImagePath(
-                    dinnerItem['imageUrl'] ?? '',
-                    'dinner-${selectedDate.weekOfYearForMenuScreen}-$category',
+                GestureDetector(
+                  onTap:
+                      () => setState(
+                        () =>
+                            expandedCards[category] =
+                                !(expandedCards[category] ?? false),
+                      ),
+                  child: Icon(
+                    expandedCards[category] ?? false
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Colors.orange,
                   ),
-                  builder: (context, snapshot) {
-                    return snapshot.data != null
-                        ? Image.file(
-                          File(snapshot.data!),
-                          width: 150,
-                          height: 150,
-                          fit: BoxFit.cover,
-                        )
-                        : Image.asset(
-                          'assets/placeholder.png',
-                          width: 150,
-                          height: 150,
-                          fit: BoxFit.cover,
-                        );
-                  },
                 ),
               ],
             ),
+            SizedBox(height: 16),
+            _MenuTextWidget(
+              key: ValueKey('$category-lunch-text'),
+              mealType: 'Lunch',
+              category: category,
+              date: _currentDate,
+              menuData: _menuCache[category],
+            ),
+            SizedBox(height: 8),
+            _MenuTextWidget(
+              key: ValueKey('$category-dinner-text'),
+              mealType: 'Dinner',
+              category: category,
+              date: _currentDate,
+              menuData: _menuCache[category],
+            ),
+            if (expandedCards[category] ?? false) ...[
+              SizedBox(height: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lunch Image:',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  SizedBox(height: 8),
+                  _MenuImageWidget(
+                    key: ValueKey('$category-lunch-image'),
+                    mealType: 'Lunch',
+                    category: category,
+                    date: _currentDate,
+                    menuData: _menuCache[category],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Dinner Image:',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  SizedBox(height: 8),
+                  _MenuImageWidget(
+                    key: ValueKey('$category-dinner-image'),
+                    mealType: 'Dinner',
+                    category: category,
+                    date: _currentDate,
+                    menuData: _menuCache[category],
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildAnimatedMenuText(String text, String category) {
-    return TweenAnimationBuilder(
-      key: ValueKey('$text-$category-$_currentDayIndex'),
-      tween: IntTween(begin: 0, end: text.length),
-      duration: Duration(milliseconds: 500),
-      builder: (context, int value, child) {
-        return Text(
-          text.substring(0, value),
-          style: TextStyle(fontSize: 16, color: Colors.white),
-        );
-      },
-      onEnd: () {
-        if (mounted) setState(() => _shouldAnimateText[category] = false);
+class _MenuTextWidget extends StatefulWidget {
+  final String mealType;
+  final String category;
+  final DateTime date;
+  final Map<String, dynamic>? menuData;
+
+  const _MenuTextWidget({
+    Key? key,
+    required this.mealType,
+    required this.category,
+    required this.date,
+    this.menuData,
+  }) : super(key: key);
+
+  @override
+  __MenuTextWidgetState createState() => __MenuTextWidgetState();
+}
+
+class __MenuTextWidgetState extends State<_MenuTextWidget> {
+  String _getWeekday(int weekday) {
+    switch (weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.menuData?['items'] as List<dynamic>? ?? [];
+    final item = items.firstWhere(
+      (item) =>
+          item['mealType'] == widget.mealType &&
+          item['day'] == _getWeekday(widget.date.weekday),
+      orElse: () => {'item': 'No item'},
+    );
+
+    return Text(
+      '${widget.mealType}: ${item['item']}',
+      style: TextStyle(fontSize: 16, color: Colors.white),
+    );
+  }
+}
+
+class _MenuImageWidget extends StatefulWidget {
+  final String mealType;
+  final String category;
+  final DateTime date;
+  final Map<String, dynamic>? menuData;
+
+  const _MenuImageWidget({
+    Key? key,
+    required this.mealType,
+    required this.category,
+    required this.date,
+    this.menuData,
+  }) : super(key: key);
+
+  @override
+  __MenuImageWidgetState createState() => __MenuImageWidgetState();
+}
+
+class __MenuImageWidgetState extends State<_MenuImageWidget> {
+  final FlutterSecureStorage _storage = FlutterSecureStorage();
+
+  String _getWeekday(int weekday) {
+    switch (weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return '';
+    }
+  }
+
+  Future<String?> _getLocalImagePath(String url, String key) async {
+    if (url.isEmpty) return null;
+    final storedUrl = await _storage.read(key: key);
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = url.hashCode.toString();
+    final filePath = '${directory.path}/$fileName.jpg';
+    final file = File(filePath);
+
+    if (storedUrl == url && file.existsSync()) {
+      return filePath;
+    } else if (storedUrl != url) {
+      try {
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          await file.writeAsBytes(response.bodyBytes);
+          await _storage.write(key: key, value: url);
+          return filePath;
+        }
+      } catch (e) {
+        print('Error downloading image for $key: $e');
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.menuData?['items'] as List<dynamic>? ?? [];
+    final item = items.firstWhere(
+      (item) =>
+          item['mealType'] == widget.mealType &&
+          item['day'] == _getWeekday(widget.date.weekday),
+      orElse: () => {'imageUrl': ''},
+    );
+
+    return FutureBuilder<String?>(
+      future: _getLocalImagePath(
+        item['imageUrl'] ?? '',
+        '${widget.mealType.toLowerCase()}-${widget.date.weekOfYearForMenuScreen}-${widget.category}',
+      ),
+      builder: (context, snapshot) {
+        return snapshot.data != null
+            ? Image.file(
+              File(snapshot.data!),
+              width: 150,
+              height: 150,
+              fit: BoxFit.cover,
+            )
+            : Image.asset(
+              'assets/placeholder.png',
+              width: 150,
+              height: 150,
+              fit: BoxFit.cover,
+            );
       },
     );
   }
