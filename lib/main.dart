@@ -10,6 +10,7 @@ import 'home/home_screen.dart';
 // Import your OnboardingScreen
 
 void main() async {
+  YandexMapKit.setApiKey('e8d4d239-e3e0-48f4-84db-a0cee4ed80f5');
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(MyApp());

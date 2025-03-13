@@ -32,6 +32,10 @@
     <application
         android:label="eazy_meals"
         android:icon="@mipmap/ic_launcher">
+        <!-- Removed android:name="com.yandex.mapkit.API_KEY" from here -->
+        <meta-data
+            android:name="com.yandex.mapkit.API_KEY"
+            android:value="e8d4d239-e3e0-48f4-84db-a0cee4ed80f5" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
