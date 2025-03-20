@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
+import 'package:lottie/lottie.dart';
 
 class OnboardingScreen extends StatefulWidget {
   @override
@@ -16,19 +17,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   final List<Map<String, String>> onboardingData = [
     {
-      "title": "Welcome to Eazy Meals",
-      "subtitle": "Your personalized meal service",
-      "image": "assets/images/on1.png",
+      "title": "Best Quality Food",
+      "subtitle":
+          "You get restaurant-quality food with the warmth of home cooking.",
+      "image": "assets/images/shield.json",
     },
     {
-      "title": "Choose Your Plan",
-      "subtitle": "Select from 1-week, 2-week, or 4-week meal plans.",
-      "image": "assets/images/on2.png",
+      "title": "Doorstep Delivery",
+      "subtitle":
+          "Fastest delivery at your doorstep. Get your meals delivered to your location.",
+      "image": "assets/images/food_delivery.json",
     },
     {
-      "title": "Get Started",
-      "subtitle": "Login or sign up to start your food journey.",
-      "image": "assets/images/on1.png",
+      "title": "Healthy & Hygienic",
+      "subtitle":
+          "Prepared with fresh ingredients and strict hygiene standards.",
+      "image": "assets/images/fruits.json",
     },
   ];
 
@@ -37,10 +41,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: Duration(milliseconds: 600),
     )..repeat(reverse: true);
 
-    _buttonAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
+    _buttonAnimation = Tween<double>(begin: 0.97, end: 1.03).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
@@ -62,10 +66,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (_currentPage < onboardingData.length - 1) {
       _pageController.nextPage(
         duration: Duration(milliseconds: 500),
-        curve: Curves.ease,
+        curve: Curves.easeInOut,
       );
     } else {
-      // Navigate to login screen when last page is reached
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
@@ -76,23 +79,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final theme = Theme.of(context);
 
-    // Define colors based on the current theme
     final backgroundColor =
         theme.brightness == Brightness.light
-            ? Colors.lightBlue[100]!
-            : Colors.grey[900]!;
+            ? Colors.lightBlue[50]!
+            : Colors.grey[850]!;
     final waveColor =
         theme.brightness == Brightness.light
-            ? Colors.blue.withAlpha(51)
-            : Colors.blue.withAlpha(26);
+            ? Colors.blue.withOpacity(0.15)
+            : Colors.blue.withOpacity(0.1);
     final textColor =
-        theme.brightness == Brightness.light ? Colors.black : Colors.white;
+        theme.brightness == Brightness.light ? Colors.black87 : Colors.white;
     final subtitleColor =
         theme.brightness == Brightness.light
-            ? Colors.grey[800]
-            : Colors.grey[300];
-    final buttonColor =
-        theme.brightness == Brightness.light ? Colors.blue : Colors.blue[700]!;
+            ? Colors.grey[700]!
+            : Colors.grey[400]!;
+    final buttonGradient = LinearGradient(
+      colors: [
+        theme.brightness == Brightness.light ? Colors.blue : Colors.blue[800]!,
+        theme.brightness == Brightness.light ? Colors.blue[700]! : Colors.blue,
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
 
     return Scaffold(
       body: Container(
@@ -105,14 +113,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         ),
         child: Stack(
           children: [
-            // Top Wave Shape
+            // Subtle Top Wave Shape
             Positioned(
               top: 0,
               child: ClipPath(
                 clipper: TopWaveClipper(),
                 child: Container(
                   width: screenWidth,
-                  height: 150,
+                  height: 120,
                   color: waveColor,
                 ),
               ),
@@ -129,52 +137,40 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   subtitle: onboardingData[index]["subtitle"]!,
                   image: onboardingData[index]["image"]!,
                   textColor: textColor,
-                  subtitleColor: subtitleColor!,
+                  subtitleColor: subtitleColor,
                 );
               },
             ),
 
-            // Bottom Wave Shape
+            // Animated Dot Indicator
             Positioned(
-              bottom: 0,
-              child: ClipPath(
-                clipper: BottomWaveClipper(),
-                child: Container(
-                  width: screenWidth,
-                  height: 100,
-                  color: waveColor,
-                ),
-              ),
-            ),
-
-            // Dots Indicator
-            Positioned(
-              bottom: screenHeight * 0.15,
+              bottom: screenHeight * 0.12,
               left: 0,
               right: 0,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
                   onboardingData.length,
-                  (index) => Container(
-                    margin: EdgeInsets.symmetric(horizontal: 4),
-                    width: 8,
-                    height: 8,
+                  (index) => AnimatedContainer(
+                    duration: Duration(milliseconds: 300),
+                    margin: EdgeInsets.symmetric(horizontal: 6),
+                    width: _currentPage == index ? 24 : 10,
+                    height: 10,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(5),
                       color:
                           _currentPage == index
-                              ? buttonColor
-                              : Colors.grey[400],
+                              ? Colors.blue[600]
+                              : Colors.grey[400]!.withOpacity(0.5),
                     ),
                   ),
                 ),
               ),
             ),
 
-            // Animated Button
+            // Animated Gradient Button
             Positioned(
-              bottom: screenHeight * 0.05,
+              bottom: screenHeight * 0.04,
               left: 0,
               right: 0,
               child: Center(
@@ -185,24 +181,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       scale: _buttonAnimation.value,
                       child: Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(30),
+                          borderRadius: BorderRadius.circular(50),
+                          gradient: buttonGradient,
                           boxShadow: [
                             BoxShadow(
-                              color: buttonColor.withAlpha(
-                                77,
-                              ), // 0.3 * 255 = 76.5 ≈ 77
-                              blurRadius: 15,
+                              color: Colors.blue.withOpacity(0.4),
+                              blurRadius: 12,
                               spreadRadius: 2,
+                              offset: Offset(0, 4),
                             ),
                           ],
                         ),
                         child: ElevatedButton(
                           onPressed: _nextPage,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: buttonColor,
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
                             padding: EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 15,
+                              horizontal: 50,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(50),
                             ),
                           ),
                           child: Text(
@@ -212,7 +212,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.white,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -250,37 +250,33 @@ class SingleOnboardingScreen extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 40),
+      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 20),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            height: screenHeight * 0.4,
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage(image),
-                fit: BoxFit.contain,
-              ),
-            ),
+            height: screenHeight * 0.45,
+            child: Lottie.asset(image, fit: BoxFit.contain, repeat: true),
           ),
-          SizedBox(height: 40),
+          SizedBox(height: 30),
           Text(
             title,
             style: TextStyle(
-              fontSize: screenWidth < 400 ? 28 : 34,
-              fontWeight: FontWeight.w800,
+              fontSize: screenWidth < 400 ? 30 : 36,
+              fontWeight: FontWeight.w900,
               color: textColor,
-              letterSpacing: 0.5,
+              letterSpacing: 0.8,
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 16),
+          SizedBox(height: 12),
           Text(
             subtitle,
             style: TextStyle(
               fontSize: screenWidth < 400 ? 16 : 18,
               color: subtitleColor,
               fontWeight: FontWeight.w400,
+              height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
@@ -290,52 +286,25 @@ class SingleOnboardingScreen extends StatelessWidget {
   }
 }
 
-// Custom Clipper for Top Wave Shape
+// Custom Clipper for Subtle Top Wave Shape
 class TopWaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     var path = Path();
-    path.lineTo(0, size.height * 0.8);
+    path.lineTo(0, size.height * 0.7);
     path.quadraticBezierTo(
       size.width * 0.25,
-      size.height * 0.6,
+      size.height * 0.9,
       size.width * 0.5,
-      size.height * 0.8,
+      size.height * 0.7,
     );
     path.quadraticBezierTo(
       size.width * 0.75,
-      size.height,
+      size.height * 0.5,
       size.width,
-      size.height * 0.8,
+      size.height * 0.7,
     );
     path.lineTo(size.width, 0);
-    return path;
-  }
-
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
-}
-
-// Custom Clipper for Bottom Wave Shape
-class BottomWaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    var path = Path();
-    path.moveTo(0, size.height);
-    path.quadraticBezierTo(
-      size.width * 0.25,
-      size.height * 0.4,
-      size.width * 0.5,
-      size.height,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
-      size.height * 0.6,
-      size.width,
-      size.height,
-    );
-    path.lineTo(size.width, 0);
-    path.lineTo(0, 0);
     return path;
   }
 

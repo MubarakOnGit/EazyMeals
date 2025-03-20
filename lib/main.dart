@@ -19,6 +19,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       initialRoute: '/onboarding', // Set OnboardingScreen as the initial route
       routes: {
         '/onboarding': (context) => OnboardingScreen(),
