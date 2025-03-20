@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import '../widgets/GlassSnackBar.dart';
 import 'VerificationScreen.dart';
 import 'forgot_password_screen.dart';
@@ -19,61 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // Add the missing Google Sign-In method
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    showGlassSnackBar(
-      context: context,
-      title: 'Signing In',
-      message: 'Connecting with Google...',
-      type: 'loading',
-    );
-
-    try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        return;
-      }
-
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
-
-      if (userCredential.user != null) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        showGlassSnackBar(
-          context: context,
-          title: 'Welcome!',
-          message: 'Google Sign-In successful',
-          type: 'success',
-        );
-        Navigator.pushReplacementNamed(context, '/CustomerDashboard');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      showGlassSnackBar(
-        context: context,
-        title: 'Google Sign-In Failed',
-        message: 'Error connecting to Google',
-        type: 'error',
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  // Update the _signInWithEmailAndPassword method
   Future<void> _signInWithEmailAndPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -92,7 +37,6 @@ class _LoginScreenState extends State<LoginScreen> {
             password: _passwordController.text.trim(),
           );
 
-      // Check if email is verified
       if (!userCredential.user!.emailVerified) {
         await _handleUnverifiedUser(userCredential.user!);
         return;
@@ -128,7 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Add this new method
   Future<void> _handleUnverifiedUser(User user) async {
     try {
       await user.reload();
@@ -153,91 +96,92 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              isDark ? Colors.grey[900]! : Colors.lightBlue[100]!,
-              theme.scaffoldBackgroundColor,
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 40),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Welcome Back!',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: 0.5,
-                  ),
+      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Welcome Back!',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white, // White text for contrast
+                  letterSpacing: 0.5,
                 ),
-                SizedBox(height: 40),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      _buildEmailField(theme),
-                      SizedBox(height: 20),
-                      _buildPasswordField(theme),
-                      SizedBox(height: 15),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ForgotPasswordScreen(),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            'Forgot Password?',
-                            style: TextStyle(color: theme.colorScheme.primary),
-                          ),
+              ),
+              SizedBox(height: 40),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _buildEmailField(),
+                    SizedBox(height: 20),
+                    _buildPasswordField(),
+                    SizedBox(height: 15),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ForgotPasswordScreen(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: Colors.blue[900],
+                          ), // Blue[900] for text button
                         ),
                       ),
-                      SizedBox(height: 30),
-                      _buildLoginButton(theme),
-                      SizedBox(height: 25),
-                      _buildGoogleSignInButton(theme, isDark),
-                      SizedBox(height: 25),
-                      _buildSignupPrompt(theme),
-                    ],
-                  ),
+                    ),
+                    SizedBox(height: 30),
+                    _buildLoginButton(),
+                    SizedBox(height: 25),
+                    _buildSignupPrompt(),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildEmailField(ThemeData theme) {
+  Widget _buildEmailField() {
     return TextFormField(
       controller: _emailController,
       keyboardType: TextInputType.emailAddress,
       decoration: InputDecoration(
         labelText: 'Email',
-        prefixIcon: Icon(Icons.email, color: theme.colorScheme.primary),
+        labelStyle: TextStyle(color: Colors.grey), // Grey label for contrast
+        prefixIcon: Icon(
+          Icons.email,
+          color: Colors.blue[900],
+        ), // Blue[900] icon
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: theme.colorScheme.primary),
+          borderSide: BorderSide(color: Colors.grey),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(
+            color: Colors.blue[900]!,
+          ), // Blue[900] focus border
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.grey),
         ),
       ),
+      style: TextStyle(color: Colors.white), // White text input
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your email';
         if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
@@ -248,22 +192,34 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildPasswordField(ThemeData theme) {
+  Widget _buildPasswordField() {
     return TextFormField(
       controller: _passwordController,
       obscureText: _obscurePassword,
       decoration: InputDecoration(
         labelText: 'Password',
-        prefixIcon: Icon(Icons.lock, color: theme.colorScheme.primary),
+        labelStyle: TextStyle(color: Colors.grey), // Grey label for contrast
+        prefixIcon: Icon(Icons.lock, color: Colors.blue[900]), // Blue[900] icon
         suffixIcon: IconButton(
           icon: Icon(
             _obscurePassword ? Icons.visibility_off : Icons.visibility,
-            color: theme.colorScheme.primary,
+            color: Colors.blue[900], // Blue[900] icon
           ),
           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(
+            color: Colors.blue[900]!,
+          ), // Blue[900] focus border
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.grey),
+        ),
       ),
+      style: TextStyle(color: Colors.white), // White text input
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your password';
         if (value.length < 6) return 'Password must be at least 6 characters';
@@ -272,11 +228,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLoginButton(ThemeData theme) {
+  Widget _buildLoginButton() {
     return ElevatedButton(
       onPressed: _isLoading ? null : _signInWithEmailAndPassword,
       style: ElevatedButton.styleFrom(
-        backgroundColor: theme.colorScheme.primary,
+        backgroundColor: Colors.blue[900], // Blue[900] button color
         padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       ),
@@ -291,40 +247,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildGoogleSignInButton(ThemeData theme, bool isDark) {
-    return OutlinedButton(
-      onPressed: _isLoading ? null : _signInWithGoogle,
-      style: OutlinedButton.styleFrom(
-        backgroundColor: isDark ? Colors.grey[800] : Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        side: BorderSide(color: theme.colorScheme.primary),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.asset('assets/images/google.png', height: 24),
-          SizedBox(width: 10),
-          Text(
-            'Sign in with Google',
-            style: TextStyle(
-              fontSize: 16,
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSignupPrompt(ThemeData theme) {
+  Widget _buildSignupPrompt() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           "Don't have an account? ",
-          style: TextStyle(color: theme.colorScheme.onSurface),
+          style: TextStyle(color: Colors.white), // White text for contrast
         ),
         TextButton(
           onPressed: () {
@@ -336,7 +265,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Text(
             'Sign Up',
             style: TextStyle(
-              color: theme.colorScheme.primary,
+              color: Colors.blue[900], // Blue[900] for sign-up text
               fontWeight: FontWeight.w600,
             ),
           ),

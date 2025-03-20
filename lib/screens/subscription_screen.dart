@@ -9,7 +9,8 @@ class SubscriptionScreen extends StatefulWidget {
   _SubscriptionScreenState createState() => _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
+class _SubscriptionScreenState extends State<SubscriptionScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = Uuid();
@@ -21,6 +22,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isActiveSubscription = false;
   bool _isLoading = true;
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
   final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
   final List<String> _mealTypes = ['Lunch', 'Dinner', 'Both'];
   final List<String> _plans = ['1 Week', '3 Weeks', '4 Weeks'];
@@ -28,7 +32,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
     _fetchInitialData();
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchInitialData() async {
@@ -209,7 +228,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         body: Center(
           child: Text(
             'Please log in to subscribe',
-            style: TextStyle(color: Colors.white, fontSize: 18),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       );
@@ -219,148 +241,100 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       return Scaffold(
         backgroundColor: Colors.grey[900],
         body: Center(
-          child: CircularProgressIndicator(color: Colors.blue.shade900),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
+          ),
         ),
       );
     }
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context); // Navigate back if possible
-            } else {}
-          },
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-        ),
-        title: Text(
-          'Choose Your Plan',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSection(
-                    title: 'Category',
-                    items: _categories,
-                    selected: _selectedCategory,
-                    onSelected: (value) {
-                      setState(() {
-                        _selectedCategory = value;
-                        _updatePrice();
-                      });
-                    },
-                    description: _getDescription('category', _selectedCategory),
-                  ),
-                  SizedBox(height: 24),
-                  _buildSection(
-                    title: 'Meal Type',
-                    items: _mealTypes,
-                    selected: _selectedMealType,
-                    onSelected: (value) {
-                      setState(() {
-                        _selectedMealType = value;
-                        _updatePrice();
-                      });
-                    },
-                    description: _getDescription('mealType', _selectedMealType),
-                  ),
-                  SizedBox(height: 24),
-                  _buildSection(
-                    title: 'Plan Duration',
-                    items: _plans,
-                    selected: _selectedPlan,
-                    onSelected: (value) {
-                      setState(() {
-                        _selectedPlan = value;
-                        _updatePrice();
-                      });
-                    },
-                    description: _getDescription('plan', _selectedPlan),
-                  ),
-                  SizedBox(height: 32),
-                  Card(
-                    elevation: 6,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    color: Colors.grey[850],
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total${_isStudentVerified ? " (10% Off)" : ""}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            '\$${_price.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 32),
-                  Center(
-                    child: ElevatedButton(
-                      onPressed:
-                          _isActiveSubscription ? null : _proceedToWhatsApp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _isActiveSubscription
-                                ? Colors.grey[700]
-                                : Colors.blue.shade900,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 16,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 4,
-                      ),
-                      child: Text(
-                        _isActiveSubscription
-                            ? 'You Already Subscribed'
-                            : 'Proceed to Pay',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: Text(
+                'Craft Your Meal Plan',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              centerTitle: true,
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSection(
+                        title: 'Cuisine Style',
+                        items: _categories,
+                        selected: _selectedCategory,
+                        onSelected: (value) {
+                          setState(() {
+                            _selectedCategory = value;
+                            _updatePrice();
+                          });
+                        },
+                        description: _getDescription(
+                          'category',
+                          _selectedCategory,
                         ),
                       ),
-                    ),
+                      SizedBox(height: 30),
+                      _buildSection(
+                        title: 'Meal Preference',
+                        items: _mealTypes,
+                        selected: _selectedMealType,
+                        onSelected: (value) {
+                          setState(() {
+                            _selectedMealType = value;
+                            _updatePrice();
+                          });
+                        },
+                        description: _getDescription(
+                          'mealType',
+                          _selectedMealType,
+                        ),
+                      ),
+                      SizedBox(height: 30),
+                      _buildSection(
+                        title: 'Subscription Length',
+                        items: _plans,
+                        selected: _selectedPlan,
+                        onSelected: (value) {
+                          setState(() {
+                            _selectedPlan = value;
+                            _updatePrice();
+                          });
+                        },
+                        description: _getDescription('plan', _selectedPlan),
+                      ),
+                      SizedBox(height: 40),
+                      _buildPriceCard(),
+                      SizedBox(height: 40),
+                      _buildActionButton(),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -372,67 +346,208 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     required Function(String) onSelected,
     required String description,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              _getIconForSection(title),
-              color: Colors.white, // Automatically white
-              size: 24,
-            ),
-            SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[850]!.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _getIconForSection(title),
+                color: Colors.blue.shade400,
+                size: 28,
               ),
+              SizedBox(width: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children:
+                items.map((item) {
+                  bool isSelected = selected == item;
+                  return GestureDetector(
+                    onTap: () => onSelected(item),
+                    child: AnimatedContainer(
+                      duration: Duration(milliseconds: 300),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient:
+                            isSelected
+                                ? LinearGradient(
+                                  colors: [
+                                    Colors.blue.shade700,
+                                    Colors.blue.shade400,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                                : null,
+                        color: isSelected ? null : Colors.grey[800],
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow:
+                            isSelected
+                                ? [
+                                  BoxShadow(
+                                    color: Colors.blue.withOpacity(0.4),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ]
+                                : null,
+                      ),
+                      child: Text(
+                        item,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.grey[300],
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+          ),
+          SizedBox(height: 12),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[400],
+              fontStyle: FontStyle.italic,
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPriceCard() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade900, Colors.blue.shade700],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children:
-              items.map((item) {
-                return ChoiceChip(
-                  label: Text(item),
-                  selected: selected == item,
-                  onSelected: (isSelected) => onSelected(item),
-                  selectedColor: Colors.blue.shade600,
-                  backgroundColor: Colors.grey[800],
-                  labelStyle: TextStyle(
-                    color: selected == item ? Colors.white : Colors.grey[300],
-                    fontWeight: FontWeight.w600,
-                  ),
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                );
-              }).toList(),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your Total',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              if (_isStudentVerified)
+                Text(
+                  'Student Discount Applied (10%)',
+                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                ),
+            ],
+          ),
+          Text(
+            '\$${_price.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton() {
+    return Center(
+      child: GestureDetector(
+        onTap: _isActiveSubscription ? null : _proceedToWhatsApp,
+        child: AnimatedContainer(
+          duration: Duration(milliseconds: 300),
+          padding: EdgeInsets.symmetric(horizontal: 60, vertical: 18),
+          decoration: BoxDecoration(
+            gradient:
+                _isActiveSubscription
+                    ? LinearGradient(
+                      colors: [Colors.grey[700]!, Colors.grey[600]!],
+                    )
+                    : LinearGradient(
+                      colors: [Colors.blue.shade700, Colors.blue.shade500],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Text(
+            _isActiveSubscription ? 'Active Plan' : 'Confirm & Pay',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 1.1,
+            ),
+          ),
         ),
-        SizedBox(height: 8),
-        Text(
-          description,
-          style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-        ),
-      ],
+      ),
     );
   }
 
   IconData _getIconForSection(String title) {
     switch (title) {
-      case 'Category':
+      case 'Cuisine Style':
         return Icons.fastfood;
-      case 'Meal Type':
-        return Icons.restaurant;
-      case 'Plan Duration':
-        return Icons.calendar_today;
+      case 'Meal Preference':
+        return Icons.restaurant_menu;
+      case 'Subscription Length':
+        return Icons.calendar_month;
       default:
         return Icons.info;
     }

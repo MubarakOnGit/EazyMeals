@@ -33,7 +33,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
 
     try {
-      // Directly send the password reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -85,80 +84,93 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              isDark ? Colors.grey[900]! : Colors.lightBlue[100]!,
-              theme.scaffoldBackgroundColor,
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 40),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Forgot Password',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: 0.5,
+      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Forgot Password',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white, // White text for contrast
+                  letterSpacing: 0.5,
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Enter your email to reset your password',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(
+                    0.7,
+                  ), // White with opacity for contrast
+                ),
+              ),
+              SizedBox(height: 40),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  labelStyle: TextStyle(
+                    color: Colors.grey,
+                  ), // Grey label for contrast
+                  prefixIcon: Icon(
+                    Icons.email,
+                    color: Colors.blue[900], // Blue[900] icon
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(
+                      color: Colors.blue[900]!,
+                    ), // Blue[900] focus border
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(color: Colors.grey),
                   ),
                 ),
-                SizedBox(height: 20),
-                Text(
-                  'Enter your email to reset your password',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                style: TextStyle(color: Colors.white), // White text input
+              ),
+              SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: _isLoading ? null : _sendPasswordResetEmail,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[900], // Blue[900] button color
+                  padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
                   ),
                 ),
-                SizedBox(height: 40),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(
-                      Icons.email,
-                      color: theme.colorScheme.primary,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: theme.colorScheme.primary),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 30),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _sendPasswordResetEmail,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
-                    padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child:
-                      _isLoading
-                          ? CircularProgressIndicator(color: Colors.white)
-                          : Text(
-                            'Reset Password',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                child:
+                    _isLoading
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
                           ),
-                ),
-              ],
-            ),
+                        )
+                        : Text(
+                          'Reset Password',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+              ),
+            ],
           ),
         ),
       ),

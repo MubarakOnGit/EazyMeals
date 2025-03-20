@@ -7,9 +7,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:path_provider/path_provider.dart';
 import '../controllers/banner_controller.dart';
-import '../delivery/orders_screen.dart';
-import 'employee_login_screen.dart';
-import 'menu_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -435,15 +432,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.grey.shade900,
         elevation: 0,
-        leading: Builder(
-          builder:
-              (context) => IconButton(
-                icon: Icon(Icons.menu, color: Colors.blue[900]),
-                onPressed: () {
-                  Scaffold.of(context).openDrawer();
-                },
-              ),
-        ),
         title: Center(
           child: Text(
             'Home',
@@ -465,43 +453,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blueGrey.shade900),
-              child: Text(
-                'Menu',
-                style: TextStyle(color: Colors.white, fontSize: 24),
-              ),
-            ),
-            ListTile(title: Text('Home'), onTap: () => Navigator.pop(context)),
-            ListTile(
-              title: Text('Menu'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => MenuScreen()),
-                );
-              },
-            ),
-            ListTile(
-              title: Text('Employee Login'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EmployeeLoginScreen(),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
       ),
       backgroundColor: Colors.grey.shade900,
       body: SingleChildScrollView(
@@ -724,4 +675,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+// Placeholder class for LocationDetails since the original wasn't provided
+class LocationDetails {
+  final String address;
+  LocationDetails(this.address);
+  factory LocationDetails.fromMap(Map<String, dynamic> map) {
+    return LocationDetails(map['address'] ?? '');
+  }
+  @override
+  String toString() => address;
 }

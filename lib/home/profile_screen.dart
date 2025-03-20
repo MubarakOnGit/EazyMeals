@@ -22,7 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController nameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
-  String activeAddress = '12 Food Street, Metro City';
+  String activeAddress = 'Add Your Address and Set Active';
   String userName = '';
   String phoneNumber = '';
   bool _isLoading = true;
@@ -293,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 backgroundImage:
                                     _profileImage != null
                                         ? FileImage(_profileImage!)
-                                        : AssetImage('assets/images/on1.png')
+                                        : AssetImage('assets/profile_pic.jpg')
                                             as ImageProvider,
                                 child: Align(
                                   alignment: Alignment.bottomRight,

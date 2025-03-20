@@ -128,90 +128,74 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              isDark ? Colors.grey[900]! : Colors.lightBlue[100]!,
-              theme.scaffoldBackgroundColor,
-            ],
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 40),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Email Verification',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: 0.5,
-                  ),
+      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Email Verification',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white, // White text for contrast
+                  letterSpacing: 0.5,
                 ),
-                SizedBox(height: 40),
-                _buildGradientProgressIndicator(theme),
-                SizedBox(height: 30),
-                Text(
-                  'We’re automatically checking your verification status...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
+              ),
+              SizedBox(height: 40),
+              _buildProgressIndicator(),
+              SizedBox(height: 30),
+              Text(
+                'check your email to complete the verification, ',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(
+                    0.7,
+                  ), // White with opacity for contrast
                 ),
-                SizedBox(height: 20),
-                TextButton(
-                  onPressed: _isResending ? null : _resendVerificationEmail,
-                  child:
-                      _isResending
-                          ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : Text(
-                            'Resend Verification Email',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
+              ),
+              SizedBox(height: 20),
+              TextButton(
+                onPressed: _isResending ? null : _resendVerificationEmail,
+                child:
+                    _isResending
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.blue[900], // Blue[900] for progress
+                            strokeWidth: 2,
                           ),
-                ),
-              ],
-            ),
+                        )
+                        : Text(
+                          'Resend Verification Email',
+                          style: TextStyle(
+                            color: Colors.blue[900], // Blue[900] for text
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildGradientProgressIndicator(ThemeData theme) {
-    return ShaderMask(
-      shaderCallback: (Rect bounds) {
-        return LinearGradient(
-          colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
-          stops: [0.0, 1.0],
-          tileMode: TileMode.mirror,
-        ).createShader(bounds);
-      },
-      child: SizedBox(
-        width: 200,
-        child: LinearProgressIndicator(
-          backgroundColor: Colors.grey[300],
-          minHeight: 8,
-          borderRadius: BorderRadius.circular(10),
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.transparent),
-        ),
+  Widget _buildProgressIndicator() {
+    return SizedBox(
+      width: 200,
+      child: LinearProgressIndicator(
+        backgroundColor: Colors.grey[700], // Darker grey for contrast
+        minHeight: 8,
+        borderRadius: BorderRadius.circular(10),
+        valueColor: AlwaysStoppedAnimation<Color>(
+          Colors.blue[900]!,
+        ), // Blue[900] for progress
       ),
     );
   }
