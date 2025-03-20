@@ -1,34 +1,307 @@
+import 'dart:io';
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_rx/src/rx_types/rx_types.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:iconsax/iconsax.dart';
-import '../controllers/banner_controller.dart'; // Adjust path as per your project structure
-import 'employee_login_screen.dart'; // Adjust path as per your project structure
-import 'menu_screen.dart'; // Adjust path as per your project structure
+import 'package:path_provider/path_provider.dart';
+import '../controllers/banner_controller.dart';
+import '../delivery/orders_screen.dart';
+import 'employee_login_screen.dart';
+import 'menu_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final BannerController bannerController = Get.put(BannerController());
+  final TextEditingController _searchController = TextEditingController();
+  RxBool isSwitched = false.obs;
+  RxBool isChecked = false.obs;
+  String userName = 'User';
+  File? _profileImage;
+  String greeting = 'Good Morning';
+  List<Map<String, dynamic>> allItems = [];
+  List<Map<String, dynamic>> filteredItems = [];
+  bool isSubscribed = false;
+  DateTime? subscriptionEndDate;
+  bool isStudentVerified = false;
+  String? activeAddress;
+  bool isTodayOrderDelivered = false;
+  DateTime? _pauseStartTime;
 
   @override
-  Widget build(BuildContext context) {
-    RxBool isSwitched = false.obs;
-    RxBool isChecked = false.obs;
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _loadProfileImage();
+    _setGreeting();
+    _searchController.addListener(_filterItems);
+  }
 
-    List<Map<String, dynamic>> items = [
+  Future<void> _loadUserData() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      try {
+        DocumentSnapshot doc =
+            await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          setState(() {
+            userName = data['name'] ?? 'User';
+            isSubscribed = data['activeSubscription'] ?? false;
+            isStudentVerified =
+                data.containsKey('studentDetails')
+                    ? (data['studentDetails']['isVerified'] ?? false)
+                    : false;
+            activeAddress =
+                data['activeAddress'] != null
+                    ? LocationDetails.fromMap(data['activeAddress']).toString()
+                    : null;
+            isSwitched.value = data['isPaused'] ?? false;
+            _pauseStartTime =
+                data['pausedAt'] != null
+                    ? (data['pausedAt'] as Timestamp).toDate()
+                    : null;
+
+            if (isSubscribed && data['subscriptionPlan'] != null) {
+              String plan = data['subscriptionPlan'];
+              Timestamp? createdAt = data['createdAt'];
+              if (createdAt != null) {
+                DateTime startDate = createdAt.toDate();
+                int days =
+                    plan == '1 Week'
+                        ? 7
+                        : plan == '3 Weeks'
+                        ? 21
+                        : 28;
+                subscriptionEndDate = startDate.add(Duration(days: days));
+              }
+            }
+            _checkTodayOrderStatus(user.uid);
+          });
+        }
+      } catch (e) {
+        print('Error loading user data: $e');
+      }
+    }
+    _initializeItems();
+  }
+
+  Future<void> _loadProfileImage() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final imagePath = '${directory.path}/profile_image.jpg';
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() => _profileImage = file);
+      }
+    } catch (e) {
+      print('Error loading profile image: $e');
+    }
+  }
+
+  void _setGreeting() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    setState(() {
+      if (hour >= 5 && hour < 12) {
+        greeting = 'Good Morning';
+      } else if (hour >= 12 && hour < 17) {
+        greeting = 'Good Afternoon';
+      } else if (hour >= 17 && hour < 20) {
+        greeting = 'Good Evening';
+      } else {
+        greeting = 'Good Night';
+      }
+    });
+  }
+
+  Future<void> _checkTodayOrderStatus(String uid) async {
+    try {
+      DateTime now = DateTime.now();
+      String today = '${now.year}-${now.month}-${now.day}';
+      DocumentSnapshot orderDoc =
+          await _firestore
+              .collection('users')
+              .doc(uid)
+              .collection('orders')
+              .doc(today)
+              .get();
+      if (orderDoc.exists) {
+        final data = orderDoc.data() as Map<String, dynamic>;
+        isTodayOrderDelivered = data['delivered'] ?? false;
+        isChecked.value = isTodayOrderDelivered;
+      }
+    } catch (e) {
+      print('Error checking order status: $e');
+    }
+  }
+
+  bool _canPauseOrPlay() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    return isSubscribed && (hour >= 9 && hour < 22); // Allowed 9 AM - 10 PM
+  }
+
+  Future<void> _togglePausePlay() async {
+    User? user = _auth.currentUser;
+    if (user == null || !isSubscribed || subscriptionEndDate == null) return;
+
+    bool newIsPaused = !isSwitched.value;
+    if (_canPauseOrPlay()) {
+      setState(() {
+        if (isSwitched.value) {
+          if (_pauseStartTime != null) {
+            final pausedDuration =
+                DateTime.now().difference(_pauseStartTime!).inSeconds;
+            subscriptionEndDate = subscriptionEndDate!.add(
+              Duration(seconds: pausedDuration),
+            );
+            _pauseStartTime = null;
+          }
+          isSwitched.value = false;
+        } else {
+          _pauseStartTime = DateTime.now();
+          isSwitched.value = true;
+        }
+      });
+
+      try {
+        await _firestore.collection('users').doc(user.uid).update({
+          'isPaused': newIsPaused,
+          'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
+          'subscriptionEndDate': Timestamp.fromDate(subscriptionEndDate!),
+        });
+
+        if (newIsPaused) {
+          await _markNextDayPaused(user.uid);
+        } else {
+          await _resumeNextDay(user.uid);
+        }
+        _initializeItems(); // Refresh subtitle
+      } catch (e) {
+        print('Error in togglePausePlay: $e');
+        setState(() => isSwitched.value = !newIsPaused);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update subscription status')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You can only pause or play between 9 AM - 10 PM'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _markNextDayPaused(String userId) async {
+    final now = DateTime.now();
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(days: 1));
+    final tomorrowStart = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      0,
+      0,
+    );
+    final tomorrowEnd = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      23,
+      59,
+      59,
+    );
+
+    QuerySnapshot orders =
+        await _firestore
+            .collection('orders')
+            .where('userId', isEqualTo: userId)
+            .where('status', isEqualTo: 'Pending Delivery')
+            .where(
+              'date',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
+            )
+            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
+            .get();
+
+    for (var order in orders.docs) {
+      await order.reference.update({'status': 'Paused'});
+    }
+  }
+
+  Future<void> _resumeNextDay(String userId) async {
+    final now = DateTime.now();
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(days: 1));
+    final tomorrowStart = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      0,
+      0,
+    );
+    final tomorrowEnd = DateTime(
+      tomorrow.year,
+      tomorrow.month,
+      tomorrow.day,
+      23,
+      59,
+      59,
+    );
+
+    QuerySnapshot orders =
+        await _firestore
+            .collection('orders')
+            .where('userId', isEqualTo: userId)
+            .where('status', isEqualTo: 'Paused')
+            .where(
+              'date',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
+            )
+            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
+            .get();
+
+    for (var order in orders.docs) {
+      await order.reference.update({'status': 'Pending Delivery'});
+    }
+  }
+
+  void _initializeItems() {
+    bool isRestrictedTime = !_canPauseOrPlay();
+    allItems = [
       {
         'title': 'Pause and Play',
-        'subtitle': 'Currently not subscribed',
+        'subtitle':
+            isSubscribed
+                ? (isRestrictedTime
+                    ? 'You are currently ${isSwitched.value ? 'paused' : 'ongoing'}, you can’t switch between these times'
+                    : (isSwitched.value
+                        ? 'You are currently paused'
+                        : 'You are currently ongoing'))
+                : 'Currently not subscribed',
         'description':
             'You can pause and play your subscription according to your wishes this way you can save the money and the dish',
         'icon': Iconsax.play,
-        'secondaryIcon': null,
+        'secondaryIcon': Iconsax.arrow_circle_right,
         'extraWidget': Obx(
           () => Switch(
             value: isSwitched.value,
-            onChanged: (value) {
-              isSwitched.value = value;
-            },
+            onChanged: isSubscribed ? (value) => _togglePausePlay() : null,
             activeColor: Colors.blue.shade200,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.blue.shade900,
@@ -37,17 +310,18 @@ class HomeScreen extends StatelessWidget {
       },
       {
         'title': 'Today\'s Order',
-        'subtitle': 'You are not subscribed any plan yet',
+        'subtitle':
+            isSubscribed
+                ? 'Check your order status'
+                : 'You are not subscribed to any plan yet',
         'description':
-            'You can see the current days order status from here you can also check the orders page for more information',
+            'You can see the current day\'s order status from here you can also check the orders page for more information',
         'icon': null,
         'secondaryIcon': Iconsax.arrow_circle_right,
         'extraWidget': Obx(
           () => Checkbox(
             value: isChecked.value,
-            onChanged: (value) {
-              isChecked.value = value!;
-            },
+            onChanged: isSubscribed ? null : (value) {},
             activeColor: Colors.blue.shade200,
             checkColor: Colors.blue.shade900,
             side: BorderSide(
@@ -64,8 +338,14 @@ class HomeScreen extends StatelessWidget {
         ),
       },
       {
-        'title': '3 Days Left',
-        'subtitle': 'Your plan automatically unsubscribe after 3 days',
+        'title':
+            isSubscribed && subscriptionEndDate != null
+                ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
+                : '0 Days Left',
+        'subtitle':
+            isSubscribed
+                ? 'Your plan ends on ${subscriptionEndDate?.toString().substring(0, 10) ?? ''}'
+                : 'Subscribe to a plan',
         'description': 'Check the orders section for more details',
         'icon': null,
         'secondaryIcon': Iconsax.arrow_circle_right,
@@ -76,19 +356,41 @@ class HomeScreen extends StatelessWidget {
               width: 50,
               height: 50,
               child: CircularProgressIndicator(
-                value: 0.4,
+                value:
+                    isSubscribed && subscriptionEndDate != null
+                        ? (subscriptionEndDate!
+                                    .difference(DateTime.now())
+                                    .inDays /
+                                (subscriptionEndDate!
+                                    .difference(
+                                      subscriptionEndDate!.subtract(
+                                        Duration(days: 28),
+                                      ),
+                                    )
+                                    .inDays
+                                    .abs()))
+                            .clamp(0.0, 1.0)
+                        : 0.0,
                 strokeWidth: 5,
                 backgroundColor: Colors.white30,
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
               ),
             ),
-            Text('40%', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text(
+              isSubscribed && subscriptionEndDate != null
+                  ? '${((subscriptionEndDate!.difference(DateTime.now()).inDays / (subscriptionEndDate!.difference(subscriptionEndDate!.subtract(Duration(days: 28))).inDays.abs())) * 100).round()}%'
+                  : '0%',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
           ],
         ),
       },
       {
         'title': 'Student Verification',
-        'subtitle': 'Complete your student verification to get 10% discount',
+        'subtitle':
+            isStudentVerified
+                ? 'You are verified (10% discount active)'
+                : 'Complete your student verification to get 10% discount',
         'description':
             'Complete your student verification with your university ID to get 10% discount',
         'icon': Iconsax.user_edit,
@@ -97,7 +399,7 @@ class HomeScreen extends StatelessWidget {
       },
       {
         'title': 'Your Active Address',
-        'subtitle': '123 Food Street, Flavor Town, FT 12345',
+        'subtitle': activeAddress ?? 'No active address set',
         'description':
             'You can add multiple addresses and set to an active address then our team can easily reach you in your place',
         'icon': Iconsax.location,
@@ -114,18 +416,24 @@ class HomeScreen extends StatelessWidget {
         'extraWidget': null,
       },
     ];
+    filteredItems = List.from(allItems);
+  }
 
-    List<String> banners = [
-      'assets/pic1.png',
-      'assets/pic1.png',
-      'assets/pic1.png',
-    ];
+  void _filterItems() {
+    String query = _searchController.text.toLowerCase();
+    setState(() {
+      filteredItems =
+          allItems
+              .where((item) => item['title'].toLowerCase().contains(query))
+              .toList();
+    });
+  }
 
-    bannerController.setBanners(banners);
-
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.grey.shade900,
         elevation: 0,
         leading: Builder(
           builder:
@@ -150,7 +458,10 @@ class HomeScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 10.0),
             child: CircleAvatar(
               radius: 18,
-              backgroundImage: AssetImage('assets/profile_pic.jpg'),
+              backgroundImage:
+                  _profileImage != null
+                      ? FileImage(_profileImage!)
+                      : AssetImage('assets/profile_pic.jpg') as ImageProvider,
             ),
           ),
         ],
@@ -166,12 +477,7 @@ class HomeScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
-            ListTile(
-              title: Text('Home'),
-              onTap: () {
-                Navigator.pop(context); // Close the drawer
-              },
-            ),
+            ListTile(title: Text('Home'), onTap: () => Navigator.pop(context)),
             ListTile(
               title: Text('Menu'),
               onTap: () {
@@ -197,23 +503,11 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade900,
       body: SingleChildScrollView(
         physics: BouncingScrollPhysics(),
         child: Stack(
           children: [
-            Positioned(
-              top: -300,
-              right: -50,
-              child: Container(
-                width: 600,
-                height: 600,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -223,21 +517,24 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hi User!👋🏼',
+                        'Hi $userName!👋🏼',
                         style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade900,
+                          color: Colors.white,
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                       Text(
-                        'Good Morning',
+                        greeting,
                         style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                       SizedBox(height: 20),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         child: TextField(
+                          controller: _searchController,
                           cursorColor: Colors.transparent,
                           decoration: InputDecoration(
                             prefixIcon: Icon(Icons.search, color: Colors.blue),
@@ -267,7 +564,7 @@ class HomeScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -282,7 +579,7 @@ class HomeScreen extends StatelessWidget {
                       mainAxisSpacing: 5,
                       childAspectRatio: 0.8,
                     ),
-                    itemCount: items.length,
+                    itemCount: filteredItems.length,
                     itemBuilder: (context, index) {
                       Gradient gradient = LinearGradient(
                         colors: [Colors.blue.shade900, Colors.blue.shade600],
@@ -311,21 +608,24 @@ class HomeScreen extends StatelessWidget {
                                         CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      if (items[index]['extraWidget'] != null &&
+                                      if (filteredItems[index]['extraWidget'] !=
+                                              null &&
                                           index != 0 &&
                                           index != 1)
                                         Padding(
                                           padding: const EdgeInsets.only(
                                             bottom: 10,
                                           ),
-                                          child: items[index]['extraWidget'],
+                                          child:
+                                              filteredItems[index]['extraWidget'],
                                         ),
-                                      if (items[index]['extraWidget'] != null &&
+                                      if (filteredItems[index]['extraWidget'] !=
+                                              null &&
                                           index != 0 &&
                                           index != 1)
                                         SizedBox(height: 10),
                                       Text(
-                                        items[index]['title']!,
+                                        filteredItems[index]['title']!,
                                         style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,
@@ -334,48 +634,51 @@ class HomeScreen extends StatelessWidget {
                                       ),
                                       SizedBox(height: 10),
                                       Text(
-                                        items[index]['subtitle']!,
+                                        filteredItems[index]['subtitle']!,
                                         style: TextStyle(
                                           fontSize: 14,
                                           color: Colors.white.withOpacity(0.8),
                                         ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
                                       ),
                                     ],
                                   ),
                                 ),
-                                if (items[index]['icon'] != null)
+                                if (filteredItems[index]['icon'] != null)
                                   Positioned(
                                     top: 10,
                                     left: 10,
                                     child: Icon(
-                                      items[index]['icon'],
+                                      filteredItems[index]['icon'],
                                       color: Colors.orange,
                                       size: 30,
                                     ),
                                   ),
                                 if (index == 1 &&
-                                    items[index]['extraWidget'] != null)
+                                    filteredItems[index]['extraWidget'] != null)
                                   Positioned(
                                     top: 10,
                                     left: 10,
-                                    child: items[index]['extraWidget'],
+                                    child: filteredItems[index]['extraWidget'],
                                   ),
-                                if (items[index]['secondaryIcon'] != null)
+                                if (filteredItems[index]['secondaryIcon'] !=
+                                    null)
                                   Positioned(
                                     top: 15,
                                     right: 15,
                                     child: Icon(
-                                      items[index]['secondaryIcon'],
+                                      filteredItems[index]['secondaryIcon'],
                                       color: Colors.blue.shade200,
                                       size: 30,
                                     ),
                                   ),
                                 if (index == 0 &&
-                                    items[index]['extraWidget'] != null)
+                                    filteredItems[index]['extraWidget'] != null)
                                   Positioned(
                                     top: 5,
                                     right: 5,
-                                    child: items[index]['extraWidget'],
+                                    child: filteredItems[index]['extraWidget'],
                                   ),
                               ],
                             ),
@@ -398,7 +701,7 @@ class HomeScreen extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    items[index]['description']!,
+                                    filteredItems[index]['description']!,
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.white,

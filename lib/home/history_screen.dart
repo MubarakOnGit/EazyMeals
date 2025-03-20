@@ -66,7 +66,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         batch.update(doc.reference, {'status': 'Cancelled'});
       }
       await batch.commit();
-      print('Cancelled ${orders.docs.length} pending orders for today');
     }
   }
 
@@ -103,7 +102,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }, SetOptions(merge: true));
 
       setState(() => _isDataMissing = false);
-      print('User data saved for ${user.uid}');
     }
   }
 
@@ -139,7 +137,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Pending subscription cancelled successfully')),
       );
-      print('Pending subscription $docId cancelled and deleted');
     }
   }
 
@@ -153,141 +150,149 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     User? user = _auth.currentUser;
-    if (user == null) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: Text(
-            'Your Plan',
-            style: TextStyle(color: Colors.blue.shade900),
-          ),
-          backgroundColor: Colors.white,
-          centerTitle: true,
-        ),
-        body: Center(child: Text('Please log in')),
-      );
-    }
-
-    if (_isDataMissing) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: Text(
-            'Your Plan',
-            style: TextStyle(color: Colors.blue.shade900),
-          ),
-          backgroundColor: Colors.white,
-          centerTitle: true,
-        ),
-        body: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'We need some information for delivery',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 20),
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              SizedBox(height: 20),
-              TextField(
-                controller: _phoneController,
-                decoration: InputDecoration(
-                  labelText: 'Phone Number',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _saveUserData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
-                child: Text('Save', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade900,
       appBar: AppBar(
-        title: Text('Your Plan', style: TextStyle(color: Colors.blue.shade900)),
-        backgroundColor: Colors.white,
+        title: Text(
+          'Your Plan',
+          style: TextStyle(
+            color: Colors.blue.shade900,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.grey.shade900,
         centerTitle: true,
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: _firestore.collection('users').doc(user.uid).snapshots(),
-        builder: (context, userSnapshot) {
-          if (!userSnapshot.hasData) {
-            print('No snapshot data yet');
-            return Center(child: CircularProgressIndicator());
-          }
-          if (userSnapshot.hasError) {
-            print('Snapshot error: ${userSnapshot.error}');
-            return Center(child: Text('Error loading data'));
-          }
-          final userData =
-              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          print('User Data: $userData'); // Log for debugging
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.grey.shade900, Colors.grey.shade900],
+          ),
+        ),
+        child:
+            user == null
+                ? Center(
+                  child: Text(
+                    'Please log in',
+                    style: TextStyle(color: Colors.white70, fontSize: 18),
+                  ),
+                )
+                : _isDataMissing
+                ? Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Card(
+                    elevation: 8,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    color: Colors.grey.shade800,
+                    child: Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Delivery Information',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 20),
+                          TextField(
+                            controller: _nameController,
+                            decoration: InputDecoration(
+                              labelText: 'Name',
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.1),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          SizedBox(height: 20),
+                          TextField(
+                            controller: _phoneController,
+                            decoration: InputDecoration(
+                              labelText: 'Phone Number',
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.1),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            keyboardType: TextInputType.phone,
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: _saveUserData,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade900,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 4,
+                            ),
+                            child: Text(
+                              'Save',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+                : StreamBuilder<DocumentSnapshot>(
+                  stream:
+                      _firestore.collection('users').doc(user.uid).snapshots(),
+                  builder: (context, userSnapshot) {
+                    if (!userSnapshot.hasData) {
+                      return Center(
+                        child: CircularProgressIndicator(color: Colors.blue),
+                      );
+                    }
+                    if (userSnapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error loading data',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                      );
+                    }
+                    final userData =
+                        userSnapshot.data!.data() as Map<String, dynamic>? ??
+                        {};
 
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    'Pending Subscriptions',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
+                    return SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionTitle('Pending Subscriptions'),
+                          _buildPendingSubscriptionsSection(user.uid),
+                          _buildSectionTitle('Active Subscriptions'),
+                          _buildActiveSubscriptionSection(userData, user.uid),
+                          _buildSectionTitle('Ended Subscriptions'),
+                          _buildEndedSubscriptions(user.uid),
+                          SizedBox(height: 80),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-                _buildPendingSubscriptionsSection(user.uid),
-                Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    'Active Subscriptions',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                ),
-                _buildActiveSubscriptionSection(userData, user.uid),
-                SizedBox(height: 20),
-                Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    'Ended Subscriptions',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                ),
-                _buildEndedSubscriptions(user.uid),
-                SizedBox(height: 80),
-              ],
-            ),
-          );
-        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed:
@@ -295,11 +300,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
               context,
               MaterialPageRoute(builder: (context) => SubscriptionScreen()),
             ).then((_) => setState(() {})),
-        label: Text('Subscribe a Plan', style: TextStyle(color: Colors.white)),
+        label: Text(
+          'New Plan',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         icon: Icon(Icons.add, color: Colors.white),
         backgroundColor: Colors.blue.shade900,
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
@@ -314,27 +339,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
               .orderBy('createdAt', descending: true)
               .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
-          return Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator(color: Colors.blue));
+        }
         if (snapshot.hasError) {
-          print('Error fetching pending subscriptions: ${snapshot.error}');
-          return Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Error loading pending subscriptions',
-              style: TextStyle(color: Colors.red),
-            ),
-          );
+          return _buildErrorText('Error loading pending subscriptions');
         }
         final pendingSubscriptions = snapshot.data!.docs;
         if (pendingSubscriptions.isEmpty) {
-          return Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'No pending subscriptions',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
+          return _buildEmptyText('No pending subscriptions');
         }
 
         return Column(
@@ -344,61 +357,112 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
                 final orderId = data['orderId'] as String? ?? 'Unknown';
 
-                return Card(
-                  elevation: 2,
+                return Container(
+                  height: 220,
+                  width: double.infinity,
                   margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.grey.shade800, Colors.grey.shade700],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Subscription ID: $orderId',
+                                'PENDING',
                                 style: TextStyle(
+                                  color: Colors.orange,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                              Icon(Icons.wifi, color: Colors.white70),
+                            ],
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            '${data['subscriptionPlan']} (${data['category']})',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            data['mealType'],
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            'Subscription Id: $orderId',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Requested: ${createdAt?.toString().substring(0, 10) ?? 'N/A'}',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
                                 ),
                               ),
                               Text(
-                                '${data['subscriptionPlan']} (${data['category']}) - ${data['mealType']}',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                              Text(
-                                'Amount: \$${data['amount']}',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                              Text(
-                                'Requested: ${createdAt != null ? "${createdAt.day}/${createdAt.month}/${createdAt.year}" : 'N/A'}',
+                                '\$${data['amount']}',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              Text(
-                                'Status: ${data['status']}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.orange,
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
+                        ],
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 40,
+                        child: Icon(
+                          Icons.account_balance_wallet,
+                          color: Colors.white.withOpacity(0.1),
+                          size: 60,
                         ),
-                        IconButton(
-                          icon: Icon(Icons.cancel, color: Colors.red),
+                      ),
+                      Positioned(
+                        right: 10,
+                        bottom: 40,
+                        child: IconButton(
+                          icon: Icon(Icons.cancel, color: Colors.redAccent),
                           onPressed:
                               () => _cancelPendingSubscription(userId, doc.id),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
@@ -415,16 +479,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!isActive ||
         !userData.containsKey('subscriptionPlan') ||
         !userData.containsKey('subscriptionId')) {
-      print(
-        'No active subscription - isActive: $isActive, hasPlan: ${userData.containsKey('subscriptionPlan')}, hasId: ${userData.containsKey('subscriptionId')}',
-      );
-      return Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text(
-          'No active subscription',
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
+      return _buildEmptyText('No active subscription');
     }
     return _buildActiveSubscriptionCard(userData, userId);
   }
@@ -437,207 +492,193 @@ class _HistoryScreenState extends State<HistoryScreen> {
         (userData['subscriptionStartDate'] as Timestamp?)?.toDate();
     final endDate = (userData['subscriptionEndDate'] as Timestamp?)?.toDate();
     final subscriptionId = userData['subscriptionId'] as String? ?? '';
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
-    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-    if (startDate == null || endDate == null || subscriptionId.isEmpty) {
-      print(
-        'Incomplete data: startDate=$startDate, endDate=$endDate, subscriptionId=$subscriptionId',
-      );
-      return Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text(
-          'Subscription data incomplete',
-          style: TextStyle(color: Colors.red),
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 4,
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue.shade900, Colors.blue.shade700],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
+    return Column(
+      children: [
+        Container(
+          height: 220,
+          width: double.infinity,
+          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade900, Colors.blue.shade700],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'ACTIVE',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Icon(Icons.wifi, color: Colors.white70),
+                    ],
+                  ),
+                  SizedBox(height: 16),
                   Text(
-                    '${userData['subscriptionPlan']} (${userData['category']}) - ${userData['mealType']}',
+                    '${userData['subscriptionPlan']} (${userData['category']})',
                     style: TextStyle(
+                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      _isExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: Colors.orange,
+                  Text(
+                    userData['mealType'],
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  Spacer(),
+                  Text(
+                    'Subscription Id: $subscriptionId',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      letterSpacing: 2,
                     ),
-                    onPressed: () => setState(() => _isExpanded = !_isExpanded),
+                  ),
+                  SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Valid: ${startDate?.toString().substring(0, 10) ?? 'N/A'} - ${endDate?.toString().substring(0, 10) ?? 'N/A'}',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          _isExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.white,
+                        ),
+                        onPressed:
+                            () => setState(() => _isExpanded = !_isExpanded),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Text(
-                'Start: ${startDate.day}/${startDate.month}/${startDate.year} - End: ${endDate.day}/${endDate.month}/${endDate.year}',
-                style: TextStyle(fontSize: 14, color: Colors.white),
+              Positioned(
+                right: 0,
+                top: 40,
+                child: Icon(
+                  Icons.account_balance_wallet,
+                  color: Colors.white.withOpacity(0.1),
+                  size: 60,
+                ),
               ),
-              SizedBox(height: 10),
-              StreamBuilder<QuerySnapshot>(
-                stream:
-                    _firestore
-                        .collection('orders')
-                        .where('userId', isEqualTo: userId)
-                        .where('subscriptionId', isEqualTo: subscriptionId)
-                        .where(
-                          'date',
-                          isGreaterThanOrEqualTo: Timestamp.fromDate(
-                            todayStart,
-                          ),
-                        )
-                        .where(
-                          'date',
-                          isLessThanOrEqualTo: Timestamp.fromDate(todayEnd),
-                        )
-                        .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return Text(
-                      'Loading today\'s order...',
-                      style: TextStyle(color: Colors.white),
-                    );
-                  }
-                  final orders = snapshot.data!.docs;
-                  if (orders.isEmpty) {
-                    return Text(
-                      'No order for today',
-                      style: TextStyle(color: Colors.white),
-                    );
-                  }
-
-                  final order = orders.first.data() as Map<String, dynamic>;
-                  final status = order['status'] ?? 'Unknown';
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Today\'s Order: ${order['mealType']}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        'Status: $status',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: _getStatusColor(status),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              if (_isExpanded) ...[
-                SizedBox(height: 10),
-                Text(
-                  'Completed/Cancelled/Paused Orders',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                StreamBuilder<QuerySnapshot>(
-                  stream:
-                      _firestore
-                          .collection('orders')
-                          .where('userId', isEqualTo: userId)
-                          .where('subscriptionId', isEqualTo: subscriptionId)
-                          .where(
-                            'status',
-                            whereIn: ['Delivered', 'Cancelled', 'Paused'],
-                          )
-                          .orderBy('date', descending: true)
-                          .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData)
-                      return CircularProgressIndicator(color: Colors.white);
-                    final orders = snapshot.data!.docs;
-                    if (orders.isEmpty) {
-                      return Text(
-                        'No completed, cancelled, or paused orders for this subscription',
-                        style: TextStyle(color: Colors.white),
-                      );
-                    }
-                    return Column(
-                      children:
-                          orders.map((doc) => _buildOrderTile(doc)).toList(),
-                    );
-                  },
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Upcoming Orders',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                StreamBuilder<QuerySnapshot>(
-                  stream:
-                      _firestore
-                          .collection('orders')
-                          .where('userId', isEqualTo: userId)
-                          .where('subscriptionId', isEqualTo: subscriptionId)
-                          .where(
-                            'date',
-                            isGreaterThan: Timestamp.fromDate(todayEnd),
-                          )
-                          .where(
-                            'date',
-                            isLessThanOrEqualTo: Timestamp.fromDate(endDate),
-                          )
-                          .orderBy('date', descending: false)
-                          .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData)
-                      return CircularProgressIndicator(color: Colors.white);
-                    final orders = snapshot.data!.docs;
-                    if (orders.isEmpty) {
-                      return Text(
-                        'No upcoming orders',
-                        style: TextStyle(color: Colors.white),
-                      );
-                    }
-                    return Column(
-                      children:
-                          orders.map((doc) => _buildOrderTile(doc)).toList(),
-                    );
-                  },
-                ),
-              ],
             ],
           ),
         ),
-      ),
+        if (_isExpanded)
+          Container(
+            width: double.infinity,
+            margin: EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade800.withOpacity(0.9),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Order Details',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                StreamBuilder<QuerySnapshot>(
+                  stream:
+                      _firestore
+                          .collection('orders')
+                          .where('userId', isEqualTo: userId)
+                          .where('subscriptionId', isEqualTo: subscriptionId)
+                          .where(
+                            'date',
+                            isGreaterThanOrEqualTo: Timestamp.fromDate(
+                              DateTime.now().subtract(Duration(days: 1)),
+                            ),
+                          )
+                          .where(
+                            'date',
+                            isLessThanOrEqualTo: Timestamp.fromDate(
+                              DateTime.now(),
+                            ),
+                          )
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return _buildLoading();
+                    }
+                    final orders = snapshot.data!.docs;
+                    if (orders.isEmpty) {
+                      return Text(
+                        'No order for today',
+                        style: TextStyle(color: Colors.white70),
+                      );
+                    }
+                    final order = orders.first.data() as Map<String, dynamic>;
+                    final status = order['status'] ?? 'Unknown';
+                    return _buildOrderTileWithStatus(order, status);
+                  },
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Past Orders',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                _buildOrderStream(userId, subscriptionId, [
+                  'Delivered',
+                  'Cancelled',
+                  'Paused',
+                ], true),
+                SizedBox(height: 8),
+                Text(
+                  'Upcoming Orders',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                _buildOrderStream(userId, subscriptionId, [
+                  'Pending Delivery',
+                ], false),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -651,83 +692,159 @@ class _HistoryScreenState extends State<HistoryScreen> {
               .orderBy('subscriptionEndDate', descending: true)
               .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting)
-          return Center(child: CircularProgressIndicator());
-        if (snapshot.hasError) {
-          print('Error fetching past subscriptions: ${snapshot.error}');
-          return Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Error loading ended subscriptions',
-              style: TextStyle(color: Colors.red),
-            ),
-          );
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator(color: Colors.blue));
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'You don\'t have any previous subscriptions',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
+        if (snapshot.hasError) {
+          return _buildErrorText('Error loading ended subscriptions');
+        }
+        if (snapshot.data!.docs.isEmpty) {
+          return _buildEmptyText('No previous subscriptions');
         }
 
-        final pastSubscriptions = snapshot.data!.docs;
         return Column(
           children:
-              pastSubscriptions.map((doc) {
+              snapshot.data!.docs.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 final startDate =
                     (data['subscriptionStartDate'] as Timestamp?)?.toDate();
                 final endDate =
                     (data['subscriptionEndDate'] as Timestamp?)?.toDate();
-                final status =
-                    data['status'] as String? ??
-                    (data['endedNaturally'] == true ? 'Ended' : 'Cancelled');
+                final subscriptionId = data['subscriptionId'] as String? ?? '';
 
-                return Card(
-                  elevation: 4,
+                return Container(
+                  height: 200,
+                  width: double.infinity,
                   margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.blue.shade900, Colors.blue.shade700],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.grey.shade800, Colors.grey.shade700],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'ENDED',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Icon(Icons.wifi, color: Colors.white70),
+                            ],
+                          ),
+                          SizedBox(height: 16),
                           Text(
-                            '${data['subscriptionPlan']} (${data['category']}) - ${data['mealType']}',
+                            '${data['subscriptionPlan']} (${data['category']})',
                             style: TextStyle(
+                              color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
                             ),
                           ),
                           Text(
-                            'Start: ${startDate != null ? "${startDate.day}/${startDate.month}/${startDate.year}" : 'N/A'} - End: ${endDate != null ? "${endDate.day}/${endDate.month}/${endDate.year}" : 'N/A'}',
-                            style: TextStyle(fontSize: 14, color: Colors.white),
+                            data['mealType'],
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
                           ),
+                          Spacer(),
                           Text(
-                            'Status: $status',
-                            style: TextStyle(fontSize: 14, color: Colors.white),
+                            'Subscription Id: $subscriptionId',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'Valid: ${startDate?.toString().substring(0, 10) ?? 'N/A'} - ${endDate?.toString().substring(0, 10) ?? 'N/A'}',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                'Status: Cancelled',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ),
+                      Positioned(
+                        right: 0,
+                        top: 40,
+                        child: Icon(
+                          Icons.account_balance_wallet,
+                          color: Colors.white.withOpacity(0.1),
+                          size: 60,
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildOrderStream(
+    String userId,
+    String subscriptionId,
+    List<String> statuses,
+    bool isPast,
+  ) {
+    return StreamBuilder<QuerySnapshot>(
+      stream:
+          _firestore
+              .collection('orders')
+              .where('userId', isEqualTo: userId)
+              .where('subscriptionId', isEqualTo: subscriptionId)
+              .where('status', whereIn: statuses)
+              .orderBy('date', descending: isPast)
+              .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return _buildLoading();
+        if (snapshot.data!.docs.isEmpty) {
+          return Text(
+            isPast ? 'No past orders' : 'No upcoming orders',
+            style: TextStyle(color: Colors.white70),
+          );
+        }
+        return Column(
+          children:
+              snapshot.data!.docs.map((doc) => _buildOrderTile(doc)).toList(),
         );
       },
     );
@@ -738,17 +855,122 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final date = (data['date'] as Timestamp?)?.toDate();
     final status = data['status'] ?? 'Unknown';
 
-    return ListTile(
-      title: Text(
-        '${data['mealType']} - ${date != null ? "${date.day}/${date.month}/${date.year}" : 'N/A'}',
-        style: TextStyle(color: Colors.white),
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
       ),
-      subtitle: Text(
-        'Status: $status',
-        style: TextStyle(color: _getStatusColor(status)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                data['mealType'],
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                date?.toString().substring(0, 10) ?? 'N/A',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          Text(
+            status,
+            style: TextStyle(
+              color: _getStatusColor(status),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
-      tileColor: _getStatusColor(status).withOpacity(0.1),
     );
+  }
+
+  Widget _buildOrderTileWithStatus(Map<String, dynamic> order, String status) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Today's: ${order['mealType']}",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                DateTime.now().toString().substring(0, 10),
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          Text(
+            status,
+            style: TextStyle(
+              color: _getStatusColor(status),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyText(String text) {
+    return Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Text(
+        text,
+        style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+      ),
+    );
+  }
+
+  Widget _buildErrorText(String text) {
+    return Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Text(text, style: TextStyle(color: Colors.redAccent)),
+    );
+  }
+
+  Widget _buildLoading() {
+    return Padding(
+      padding: EdgeInsets.all(8.0),
+      child: CircularProgressIndicator(color: Colors.white),
+    );
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'Pending Delivery':
+        return Icons.hourglass_empty;
+      case 'Delivered':
+        return Icons.check_circle;
+      case 'Cancelled':
+        return Icons.cancel;
+      case 'Paused':
+        return Icons.pause_circle;
+      default:
+        return Icons.help;
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -758,6 +980,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       case 'Delivered':
         return Colors.green;
       case 'Cancelled':
+      case 'Ended':
         return Colors.red;
       case 'Paused':
         return Colors.orange;

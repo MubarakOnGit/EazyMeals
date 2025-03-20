@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.eazy_meals"
-    compileSdk = 34 // Explicitly set to Android 14
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {

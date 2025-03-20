@@ -38,6 +38,7 @@ class _MenuScreenState extends State<MenuScreen> {
     'North Indian': false,
   };
   Map<String, Map<String, dynamic>> _menuCache = {};
+  File? _profileImage;
 
   @override
   void initState() {
@@ -45,12 +46,12 @@ class _MenuScreenState extends State<MenuScreen> {
     _scheduleDailyUpdate();
     _schedulePauseCheck();
     _loadInitialState();
+    _loadProfileImage();
     dates = _generateDates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollController.jumpTo(itemWidth * (_currentDayIndex - 2));
       _fetchMenuData();
     });
-
     _scrollController.addListener(_handleScroll);
   }
 
@@ -163,10 +164,25 @@ class _MenuScreenState extends State<MenuScreen> {
           if (_activeSubscription && _subscriptionEndDate != null) {
             _remainingSeconds =
                 _subscriptionEndDate!.difference(_currentDate).inSeconds;
-            if (_remainingSeconds > 0 && !_isPaused) _startTimer();
+            if (_remainingSeconds > 0 && !_isPaused) {
+              _startTimer();
+            }
           }
         });
       }
+    }
+  }
+
+  Future<void> _loadProfileImage() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final imagePath = '${directory.path}/profile_image.jpg';
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() => _profileImage = file);
+      }
+    } catch (e) {
+      print('Error loading profile image: $e');
     }
   }
 
@@ -199,7 +215,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _timer?.cancel();
     if (_remainingSeconds > 0 && !_isPaused) {
       _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-        if (mounted) {
+        if (mounted && !_isPaused) {
           setState(() {
             _remainingSeconds--;
             if (_remainingSeconds <= 0) {
@@ -207,6 +223,8 @@ class _MenuScreenState extends State<MenuScreen> {
               timer.cancel();
             }
           });
+        } else {
+          timer.cancel();
         }
       });
     }
@@ -292,58 +310,66 @@ class _MenuScreenState extends State<MenuScreen> {
   bool _canPauseOrPlay() {
     final now = DateTime.now();
     final hour = now.hour;
-    return _activeSubscription && (hour >= 9 && hour < 21);
+    return _activeSubscription &&
+        (hour >= 9 && hour < 22); // Allowed 9 AM - 10 PM
   }
 
-  void _togglePausePlay() async {
+  Future<void> _togglePausePlay() async {
     User? user = _auth.currentUser;
     if (user == null || !_activeSubscription || _subscriptionEndDate == null)
       return;
 
     bool newIsPaused = !_isPaused;
-    setState(() {
-      if (_isPaused) {
-        if (_pauseStartTime != null) {
-          final pausedDuration =
-              DateTime.now().difference(_pauseStartTime!).inSeconds;
-          _subscriptionEndDate = _subscriptionEndDate!.add(
-            Duration(seconds: pausedDuration),
-          );
-          _remainingSeconds =
-              _subscriptionEndDate!.difference(_currentDate).inSeconds;
-          _isPaused = false;
-          _pauseStartTime = null;
-          _startTimer();
-        }
-      } else {
-        _isPaused = true;
-        _pauseStartTime = DateTime.now();
-        _timer?.cancel();
-      }
-    });
-
-    try {
-      final batch = _firestore.batch();
-      final userDocRef = _firestore.collection('users').doc(user.uid);
-      batch.update(userDocRef, {
-        'isPaused': newIsPaused,
-        'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
-        'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
-      });
-
-      if (newIsPaused) {
-        await _markNextDayPaused(user.uid);
-      } else {
-        await _resumeNextDay(user.uid);
-      }
-
-      await batch.commit();
-    } catch (e) {
-      print('Error in togglePausePlay: $e');
+    if (_canPauseOrPlay()) {
       setState(() {
-        _isPaused = !newIsPaused;
-        if (!_isPaused) _startTimer();
+        if (_isPaused) {
+          if (_pauseStartTime != null) {
+            final pausedDuration =
+                DateTime.now().difference(_pauseStartTime!).inSeconds;
+            _subscriptionEndDate = _subscriptionEndDate!.add(
+              Duration(seconds: pausedDuration),
+            );
+            _remainingSeconds =
+                _subscriptionEndDate!.difference(_currentDate).inSeconds;
+            _isPaused = false;
+            _pauseStartTime = null;
+            _startTimer();
+          }
+        } else {
+          _isPaused = true;
+          _pauseStartTime = DateTime.now();
+          _timer?.cancel();
+        }
       });
+
+      try {
+        await _firestore.collection('users').doc(user.uid).update({
+          'isPaused': newIsPaused,
+          'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
+          'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
+        });
+
+        if (newIsPaused) {
+          await _markNextDayPaused(user.uid);
+        } else {
+          await _resumeNextDay(user.uid);
+        }
+      } catch (e) {
+        print('Error in togglePausePlay: $e');
+        setState(() {
+          _isPaused = !newIsPaused;
+          if (_isPaused) _timer?.cancel();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update subscription status')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You can only pause or play between 9 AM - 10 PM'),
+        ),
+      );
     }
   }
 
@@ -382,11 +408,9 @@ class _MenuScreenState extends State<MenuScreen> {
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
 
-    final batch = _firestore.batch();
     for (var order in orders.docs) {
-      batch.update(order.reference, {'status': 'Paused'});
+      await order.reference.update({'status': 'Paused'});
     }
-    await batch.commit();
   }
 
   Future<void> _resumeNextDay(String userId) async {
@@ -424,11 +448,9 @@ class _MenuScreenState extends State<MenuScreen> {
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
 
-    final batch = _firestore.batch();
     for (var order in orders.docs) {
-      batch.update(order.reference, {'status': 'Pending Delivery'});
+      await order.reference.update({'status': 'Pending Delivery'});
     }
-    await batch.commit();
   }
 
   String _formatDate(DateTime date) {
@@ -462,11 +484,11 @@ class _MenuScreenState extends State<MenuScreen> {
         case 1:
           return 'Next Week';
         case 2:
-          return 'Second Week';
-        case 3:
           return 'Third Week';
-        case 4:
+        case 3:
           return 'Fourth Week';
+        case 4:
+          return 'Future';
         default:
           return 'Future';
       }
@@ -505,7 +527,7 @@ class _MenuScreenState extends State<MenuScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade900,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: BouncingScrollPhysics(),
@@ -522,16 +544,13 @@ class _MenuScreenState extends State<MenuScreen> {
                       children: [
                         Text(
                           _formatDate(_currentDate),
-                          style: TextStyle(
-                            color: Colors.blue.shade900,
-                            fontSize: 16,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
                         SizedBox(height: 2),
                         Text(
                           _getRelativeDayText(_currentDayIndex),
                           style: TextStyle(
-                            color: Colors.blue.shade900,
+                            color: Colors.white,
                             fontSize: 30,
                             fontWeight: FontWeight.bold,
                           ),
@@ -542,7 +561,11 @@ class _MenuScreenState extends State<MenuScreen> {
                       children: [
                         CircleAvatar(
                           radius: 40,
-                          backgroundImage: AssetImage('assets/profile_pic.jpg'),
+                          backgroundImage:
+                              _profileImage != null
+                                  ? FileImage(_profileImage!)
+                                  : AssetImage('assets/profile_pic.jpg')
+                                      as ImageProvider,
                         ),
                       ],
                     ),
@@ -583,13 +606,15 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: Container(
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade900, Colors.blue.shade700],
+                    ),
                     borderRadius: BorderRadius.circular(15),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
+                        color: Colors.black12,
                         spreadRadius: 2,
-                        blurRadius: 5,
+                        blurRadius: 1,
                         offset: Offset(0, 3),
                       ),
                     ],
@@ -648,7 +673,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     Text(
                       'Menu',
                       style: TextStyle(
-                        color: Colors.blue.shade900,
+                        color: Colors.white,
                         fontSize: 30,
                         fontWeight: FontWeight.bold,
                       ),
@@ -700,7 +725,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     BoxShadow(
                       color: Colors.black.withOpacity(0.3),
                       spreadRadius: 1,
-                      blurRadius: 3,
+                      blurRadius: 2,
                       offset: Offset(3, 1),
                     ),
                   ]
@@ -713,7 +738,7 @@ class _MenuScreenState extends State<MenuScreen> {
               date,
               style: TextStyle(
                 fontSize: 18,
-                color: isCurrent ? Colors.white : Colors.black,
+                color: isCurrent ? Colors.white : Colors.blue,
               ),
             ),
             SizedBox(height: 4),
@@ -721,7 +746,7 @@ class _MenuScreenState extends State<MenuScreen> {
               day.substring(0, 3),
               style: TextStyle(
                 fontSize: 14,
-                color: isCurrent ? Colors.white : Colors.black,
+                color: isCurrent ? Colors.white : Colors.blue,
               ),
             ),
             if (isCurrent) ...[
@@ -757,14 +782,14 @@ class _MenuScreenState extends State<MenuScreen> {
               child: CircularProgressIndicator(
                 value: progress,
                 strokeWidth: 8,
-                color: Colors.blue.shade900,
-                backgroundColor: Colors.grey.shade200,
+                color: Colors.orange.shade400,
+                backgroundColor: Colors.blue,
               ),
             ),
             Text(
               centerText,
               style: TextStyle(
-                color: Colors.blue.shade900,
+                color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -772,7 +797,7 @@ class _MenuScreenState extends State<MenuScreen> {
           ],
         ),
         SizedBox(height: 8),
-        Text(bottomText, style: TextStyle(fontSize: 14)),
+        Text(bottomText, style: TextStyle(fontSize: 14, color: Colors.white)),
       ],
     );
   }
@@ -791,20 +816,23 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: CircularProgressIndicator(
                   value: 0.5,
                   strokeWidth: 8,
-                  color: Colors.blue.shade900,
-                  backgroundColor: Colors.grey.shade200,
+                  color: Colors.orange.shade400,
+                  backgroundColor: Colors.blue,
                 ),
               ),
               Icon(
                 _isPaused ? Icons.pause : Icons.play_arrow,
-                color: Colors.blue.shade900,
+                color: Colors.white,
                 size: 30,
               ),
             ],
           ),
         ),
         SizedBox(height: 8),
-        Text(_isPaused ? 'Paused' : 'Ongoing', style: TextStyle(fontSize: 14)),
+        Text(
+          _isPaused ? 'Paused' : 'Ongoing',
+          style: TextStyle(fontSize: 14, color: Colors.white),
+        ),
       ],
     );
   }
@@ -827,7 +855,7 @@ class _MenuScreenState extends State<MenuScreen> {
           child: Text('Subscribe', style: TextStyle(color: Colors.white)),
         ),
         SizedBox(height: 8),
-        Text('Not Subscribed', style: TextStyle(fontSize: 14)),
+        Text('', style: TextStyle(fontSize: 14)),
       ],
     );
   }
@@ -846,9 +874,9 @@ class _MenuScreenState extends State<MenuScreen> {
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black12,
               spreadRadius: 2,
-              blurRadius: 5,
+              blurRadius: 1,
               offset: Offset(0, 3),
             ),
           ],

@@ -51,12 +51,18 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade900,
       appBar: AppBar(
+        backgroundColor: Colors.grey.shade900,
         leading: IconButton(
+          color: Colors.white,
           icon: Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Menu'),
+        title: Text(
+          'Menu',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         centerTitle: true,
       ),
       body: Column(
@@ -148,7 +154,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
                         children: [
                           Text(
                             '${date.day}/${date.month}',
-                            style: TextStyle(fontSize: 16),
+                            style: TextStyle(fontSize: 16, color: Colors.white),
                           ),
                           SizedBox(width: 16),
                           Expanded(
