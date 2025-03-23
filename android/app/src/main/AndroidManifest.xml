@@ -30,7 +30,7 @@
     </queries>
 
     <application
-        android:label="eazy_meals"
+        android:label="EazyMeals"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../utils/theme.dart';
+
 class SplashScreen extends StatefulWidget {
   @override
   _SplashScreenState createState() => _SplashScreenState();
@@ -59,11 +61,15 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Consistent background
+      backgroundColor: backgroundColor,
       body: Stack(
         children: [
           Center(
-            child: FlutterLogo(size: 150), // Replace with your logo
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 300, // Adjust size as needed
+              height: 300,
+            ),
           ),
           Positioned(
             left: 0,
@@ -76,10 +82,9 @@ class _SplashScreenState extends State<SplashScreen>
                 builder: (context, child) {
                   return LinearProgressIndicator(
                     value: _progressAnimation.value, // Progress from 0 to 1
-                    backgroundColor:
-                        Colors.grey[700], // Darker grey for contrast
+                    backgroundColor: Colors.white24, // Darker grey for contrast
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.blue[900]!,
+                      Colors.blue,
                     ), // Blue[900] progress
                     minHeight: 8,
                     borderRadius: BorderRadius.circular(10),

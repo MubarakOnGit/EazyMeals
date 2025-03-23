@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:eazy_meals/utils/theme.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:path_provider/path_provider.dart';
 import '../controllers/banner_controller.dart';
+import '../controllers/order_status_controller.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -17,9 +19,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final BannerController bannerController = Get.put(BannerController());
+  final OrderController orderController =
+      Get.find<OrderController>(); // Use existing controller
   final TextEditingController _searchController = TextEditingController();
   RxBool isSwitched = false.obs;
-  RxBool isChecked = false.obs;
+  RxBool isChecked = false.obs; // Will sync with controller
   String userName = 'User';
   File? _profileImage;
   String greeting = 'Good Morning';
@@ -29,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? subscriptionEndDate;
   bool isStudentVerified = false;
   String? activeAddress;
-  bool isTodayOrderDelivered = false;
   DateTime? _pauseStartTime;
 
   @override
@@ -80,7 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 subscriptionEndDate = startDate.add(Duration(days: days));
               }
             }
-            _checkTodayOrderStatus(user.uid);
           });
         }
       } catch (e) {
@@ -117,27 +119,6 @@ class _HomeScreenState extends State<HomeScreen> {
         greeting = 'Good Night';
       }
     });
-  }
-
-  Future<void> _checkTodayOrderStatus(String uid) async {
-    try {
-      DateTime now = DateTime.now();
-      String today = '${now.year}-${now.month}-${now.day}';
-      DocumentSnapshot orderDoc =
-          await _firestore
-              .collection('users')
-              .doc(uid)
-              .collection('orders')
-              .doc(today)
-              .get();
-      if (orderDoc.exists) {
-        final data = orderDoc.data() as Map<String, dynamic>;
-        isTodayOrderDelivered = data['delivered'] ?? false;
-        isChecked.value = isTodayOrderDelivered;
-      }
-    } catch (e) {
-      print('Error checking order status: $e');
-    }
   }
 
   bool _canPauseOrPlay() {
@@ -181,7 +162,6 @@ class _HomeScreenState extends State<HomeScreen> {
         } else {
           await _resumeNextDay(user.uid);
         }
-        _initializeItems(); // Refresh subtitle
       } catch (e) {
         print('Error in togglePausePlay: $e');
         setState(() => isSwitched.value = !newIsPaused);
@@ -279,18 +259,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initializeItems() {
-    bool isRestrictedTime = !_canPauseOrPlay();
     allItems = [
       {
         'title': 'Pause and Play',
-        'subtitle':
-            isSubscribed
-                ? (isRestrictedTime
-                    ? 'You are currently ${isSwitched.value ? 'paused' : 'ongoing'}, you can’t switch between these times'
-                    : (isSwitched.value
-                        ? 'You are currently paused'
-                        : 'You are currently ongoing'))
-                : 'Currently not subscribed',
         'description':
             'You can pause and play your subscription according to your wishes this way you can save the money and the dish',
         'icon': Iconsax.play,
@@ -317,12 +288,16 @@ class _HomeScreenState extends State<HomeScreen> {
         'secondaryIcon': Iconsax.arrow_circle_right,
         'extraWidget': Obx(
           () => Checkbox(
-            value: isChecked.value,
-            onChanged: isSubscribed ? null : (value) {},
+            value:
+                orderController.isTodayOrderDelivered.value, // Use controller
+            onChanged: null, // Read-only
             activeColor: Colors.blue.shade200,
             checkColor: Colors.blue.shade900,
             side: BorderSide(
-              color: isChecked.value ? Colors.blue.shade200 : Colors.orange,
+              color:
+                  orderController.isTodayOrderDelivered.value
+                      ? Colors.blue.shade200
+                      : Colors.orange,
               width: 1.5,
             ),
             fillColor: MaterialStateProperty.resolveWith((states) {
@@ -430,13 +405,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.grey.shade900,
+        leading: Icon(null),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Center(
           child: Text(
             'Home',
             style: TextStyle(
-              color: Colors.blue[900],
+              color: appbarMenuTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -454,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: backgroundColor,
       body: SingleChildScrollView(
         physics: BouncingScrollPhysics(),
         child: Stack(
@@ -472,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: headTextColor,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -515,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: headTextColor,
                     ),
                   ),
                 ),
@@ -584,15 +560,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                       ),
                                       SizedBox(height: 10),
-                                      Text(
-                                        filteredItems[index]['subtitle']!,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.white.withOpacity(0.8),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 2,
-                                      ),
+                                      index == 0
+                                          ? Obx(
+                                            () => Text(
+                                              isSubscribed
+                                                  ? (!_canPauseOrPlay()
+                                                      ? 'You are currently ${isSwitched.value ? 'paused' : 'ongoing'}, you can’t switch between these times'
+                                                      : (isSwitched.value
+                                                          ? 'You are currently paused'
+                                                          : 'You are currently ongoing'))
+                                                  : 'Currently not subscribed',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.white.withOpacity(
+                                                  0.8,
+                                                ),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 2,
+                                            ),
+                                          )
+                                          : Text(
+                                            filteredItems[index]['subtitle']!,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.white.withOpacity(
+                                                0.8,
+                                              ),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
                                     ],
                                   ),
                                 ),
@@ -677,7 +675,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Placeholder class for LocationDetails since the original wasn't provided
+// Placeholder class for LocationDetails
 class LocationDetails {
   final String address;
   LocationDetails(this.address);

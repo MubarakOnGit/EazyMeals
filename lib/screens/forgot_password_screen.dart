@@ -1,3 +1,4 @@
+import 'package:eazy_meals/utils/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/GlassSnackBar.dart';
@@ -33,6 +34,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
 
     try {
+      // First check if the email exists
+      List<String> signInMethods = await FirebaseAuth.instance
+          .fetchSignInMethodsForEmail(email);
+
+      if (signInMethods.isEmpty) {
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'No account found with this email',
+        );
+      }
+
+      // If email exists, send reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -58,6 +71,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           break;
         case 'auth/user-disabled':
           message = 'This account has been disabled';
+          break;
+        case 'too-many-requests':
+          message = 'Too many attempts, please try again later';
           break;
         default:
           message = 'Failed to send reset email: ${e.message}';
@@ -85,7 +101,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      backgroundColor: backgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 40),
@@ -97,19 +113,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white, // White text for contrast
+                  color: headTextColor,
                   letterSpacing: 0.5,
                 ),
               ),
               SizedBox(height: 20),
               Text(
                 'Enter your email to reset your password',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white.withOpacity(
-                    0.7,
-                  ), // White with opacity for contrast
-                ),
+                style: TextStyle(fontSize: 16, color: subHeadTextColor),
               ),
               SizedBox(height: 40),
               TextFormField(
@@ -117,58 +128,54 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   labelText: 'Email',
-                  labelStyle: TextStyle(
-                    color: Colors.grey,
-                  ), // Grey label for contrast
-                  prefixIcon: Icon(
-                    Icons.email,
-                    color: Colors.blue[900], // Blue[900] icon
-                  ),
+                  labelStyle: TextStyle(color: Colors.grey),
+                  prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide(color: Colors.grey),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(
-                      color: Colors.blue[900]!,
-                    ), // Blue[900] focus border
+                    borderSide: BorderSide(color: Colors.blue[900]!),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide(color: Colors.grey),
                   ),
                 ),
-                style: TextStyle(color: Colors.white), // White text input
+                style: TextStyle(color: Colors.black),
               ),
               SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _sendPasswordResetEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[900], // Blue[900] button color
-                  padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _sendPasswordResetEmail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[900],
+                    padding: EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
                   ),
+                  child:
+                      _isLoading
+                          ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : Text(
+                            'Reset Password',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: buttonTextColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                 ),
-                child:
-                    _isLoading
-                        ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                        : Text(
-                          'Reset Password',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
               ),
             ],
           ),

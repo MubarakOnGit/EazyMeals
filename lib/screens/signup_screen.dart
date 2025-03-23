@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
 import 'VerificationScreen.dart';
 import 'login_screen.dart';
@@ -134,7 +135,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: backgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 40),
@@ -146,7 +147,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: headTextColor,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -178,7 +179,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             text: TextSpan(
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.white,
+                                color: subHeadTextColor,
                               ),
                               children: [
                                 TextSpan(text: 'I agree to the '),
@@ -261,7 +262,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white),
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your name';
         return null;
@@ -290,7 +291,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white),
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your email';
         if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
@@ -322,7 +323,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white),
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) {
           return 'Please enter your phone number';
@@ -360,7 +361,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white),
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your password';
         if (value.length < 6) return 'Password must be at least 6 characters';
@@ -370,31 +371,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildSignUpButton() {
-    return ElevatedButton(
-      onPressed: _agreeToTerms ? (_isLoading ? null : _signUp) : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _agreeToTerms ? Colors.blue[900] : Colors.grey,
-        padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+    return SizedBox(
+      width: double.infinity, // Matches login button width
+      child: ElevatedButton(
+        onPressed: _agreeToTerms ? (_isLoading ? null : _signUp) : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _agreeToTerms ? Colors.blue[900] : Colors.grey,
+          padding: EdgeInsets.symmetric(
+            vertical: 15,
+          ), // Matches login button height
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ), // Matches login button radius
+        ),
+        child:
+            _isLoading
+                ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+                : Text(
+                  'Sign Up',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
       ),
-      child:
-          _isLoading
-              ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-              : Text(
-                'Sign Up',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
     );
   }
 
@@ -404,7 +412,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       children: [
         Text(
           "Already have an account? ",
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: subHeadTextColor),
         ),
         TextButton(
           onPressed:
@@ -430,12 +438,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: appbarIconColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -453,23 +461,24 @@ class PrivacyPolicyScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: headTextColor,
               ),
             ),
             SizedBox(height: 20),
             Text(
-              'This is a dummy Privacy Policy for demonstration purposes:\n\n'
-              '1. **Data Collection**: We collect your name, email, and phone number '
-              'to provide you with our services.\n\n'
-              '2. **Usage**: Your data is used solely for account creation, verification, '
-              'and communication purposes.\n\n'
-              '3. **Security**: We implement reasonable measures to protect your '
-              'personal information from unauthorized access.\n\n'
-              '4. **Sharing**: We do not share your data with third parties without '
-              'your consent, except as required by law.\n\n'
-              '5. **Updates**: This policy may be updated periodically, and you will '
-              'be notified of significant changes.',
-              style: TextStyle(fontSize: 16, color: Colors.white, height: 1.5),
+              'This is the Terms of Use for the Eazy Meals app:\n\n'
+              '1. Acceptance: By using the Eazy Meals app, you agree to follow these terms and conditions.\n\n'
+              '2. Eligibility: You must be at least 18 years old to use this service.\n\n'
+              '3. Account Responsibility: You are responsible for keeping your login credentials secure and confidential.\n\n'
+              '4. Service Area: Eazy Meals operates only within the Tbilisi city area. Orders placed outside this area may not be fulfilled.\n\n'
+              '5. Prohibited Actions: You may not use the service for illegal activities or to interfere with the experience of other users.\n\n'
+              '6. Refunds: Refunds are issued only on legitimate grounds when the mistake is on our side (e.g., wrong delivery or missing items).\n\n'
+              '7. Termination: We reserve the right to suspend or terminate your account if these terms are violated.',
+              style: TextStyle(
+                fontSize: 16,
+                color: subHeadTextColor,
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -483,12 +492,12 @@ class TermsOfUseScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: appbarIconColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -506,21 +515,23 @@ class TermsOfUseScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: headTextColor,
               ),
             ),
             SizedBox(height: 20),
             Text(
-              'This is a dummy Terms of Use for demonstration purposes:\n\n'
-              '1. **Acceptance**: By using our service, you agree to these terms.\n\n'
-              '2. **Eligibility**: You must be at least 18 years old to use this service.\n\n'
-              '3. **Account Responsibility**: You are responsible for maintaining the '
-              'confidentiality of your account credentials.\n\n'
-              '4. **Prohibited Actions**: You may not use our service for illegal activities '
-              'or to harm others.\n\n'
-              '5. **Termination**: We reserve the right to terminate your account for '
-              'violating these terms.',
-              style: TextStyle(fontSize: 16, color: Colors.white, height: 1.5),
+              'This is the Privacy Policy for the Eazy Meals app:\n\n'
+              '1. Data Collection: We collect your name, email, phone number, and location to provide our meal delivery service.\n\n'
+              '2. Student Data Collection: We collect age , gender , admission year , course and university id details for student verification\n\n'
+              '2. Usage: Your information is used only to create your account, confirm your orders, and deliver your meals.\n\n'
+              '3. Security: We take reasonable steps to protect your personal data from unauthorized access.\n\n'
+              '4. Sharing: We do not share your personal information with third parties without your consent, unless required by law.\n\n'
+              '5. Updates: Our privacy policy may change over time. You will be notified of any important updates.',
+              style: TextStyle(
+                fontSize: 16,
+                color: subHeadTextColor,
+                height: 1.5,
+              ),
             ),
           ],
         ),

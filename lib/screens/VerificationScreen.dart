@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
 import 'CongratulationsScreen.dart';
 
@@ -74,9 +75,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
           context: context,
           title: 'Verification Check Failed',
           message:
-              e.code == 'network-request-failed'
-                  ? 'Internet connection required'
-                  : 'Please try again later',
+          e.code == 'network-request-failed'
+              ? 'Internet connection required'
+              : 'Please try again later',
           type: 'error',
         );
       }
@@ -129,7 +130,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      backgroundColor: backgroundColor,
       body: Center(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 40),
@@ -141,7 +142,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white, // White text for contrast
+                  color: headTextColor, // White text for contrast
                   letterSpacing: 0.5,
                 ),
               ),
@@ -153,31 +154,29 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.white.withOpacity(
-                    0.7,
-                  ), // White with opacity for contrast
-                ),
+                  color: subHeadTextColor,
+                ), // White with opacity for contrast
               ),
               SizedBox(height: 20),
               TextButton(
                 onPressed: _isResending ? null : _resendVerificationEmail,
                 child:
-                    _isResending
-                        ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.blue[900], // Blue[900] for progress
-                            strokeWidth: 2,
-                          ),
-                        )
-                        : Text(
-                          'Resend Verification Email',
-                          style: TextStyle(
-                            color: Colors.blue[900], // Blue[900] for text
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                _isResending
+                    ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.blue[900], // Blue[900] for progress
+                    strokeWidth: 2,
+                  ),
+                )
+                    : Text(
+                  'Resend Verification Email',
+                  style: TextStyle(
+                    color: Colors.blue[900], // Blue[900] for text
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -190,7 +189,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
     return SizedBox(
       width: 200,
       child: LinearProgressIndicator(
-        backgroundColor: Colors.grey[700], // Darker grey for contrast
+        backgroundColor: Colors.blue.shade50,
         minHeight: 8,
         borderRadius: BorderRadius.circular(10),
         valueColor: AlwaysStoppedAnimation<Color>(

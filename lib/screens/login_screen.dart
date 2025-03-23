@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
 import 'VerificationScreen.dart';
 import 'forgot_password_screen.dart';
@@ -50,7 +51,10 @@ class _LoginScreenState extends State<LoginScreen> {
         type: 'success',
       );
 
-      Navigator.pushReplacementNamed(context, '/CustomerDashboard');
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/CustomerDashboard',
+        (Route<dynamic> route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       String message = e.message ?? 'Invalid email or password';
@@ -97,19 +101,25 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Fixed grey[900] background
+      backgroundColor: backgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Image.asset(
+                'assets/images/logo_crop.png',
+                height: 100,
+                width: 100,
+              ),
+              SizedBox(height: 20),
               Text(
                 'Welcome Back!',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white, // White text for contrast
+                  color: headTextColor,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -135,9 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                         child: Text(
                           'Forgot Password?',
-                          style: TextStyle(
-                            color: Colors.blue[900],
-                          ), // Blue[900] for text button
+                          style: TextStyle(color: Colors.blue[900]),
                         ),
                       ),
                     ),
@@ -161,27 +169,22 @@ class _LoginScreenState extends State<LoginScreen> {
       keyboardType: TextInputType.emailAddress,
       decoration: InputDecoration(
         labelText: 'Email',
-        labelStyle: TextStyle(color: Colors.grey), // Grey label for contrast
-        prefixIcon: Icon(
-          Icons.email,
-          color: Colors.blue[900],
-        ), // Blue[900] icon
+        labelStyle: TextStyle(color: Colors.grey),
+        prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
           borderSide: BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(
-            color: Colors.blue[900]!,
-          ), // Blue[900] focus border
+          borderSide: BorderSide(color: Colors.blue[900]!),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white), // White text input
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your email';
         if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
@@ -198,28 +201,26 @@ class _LoginScreenState extends State<LoginScreen> {
       obscureText: _obscurePassword,
       decoration: InputDecoration(
         labelText: 'Password',
-        labelStyle: TextStyle(color: Colors.grey), // Grey label for contrast
-        prefixIcon: Icon(Icons.lock, color: Colors.blue[900]), // Blue[900] icon
+        labelStyle: TextStyle(color: Colors.grey),
+        prefixIcon: Icon(Icons.lock, color: Colors.blue[900]),
         suffixIcon: IconButton(
           icon: Icon(
             _obscurePassword ? Icons.visibility_off : Icons.visibility,
-            color: Colors.blue[900], // Blue[900] icon
+            color: Colors.blue[900],
           ),
           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(
-            color: Colors.blue[900]!,
-          ), // Blue[900] focus border
+          borderSide: BorderSide(color: Colors.blue[900]!),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
           borderSide: BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: Colors.white), // White text input
+      style: TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your password';
         if (value.length < 6) return 'Password must be at least 6 characters';
@@ -229,19 +230,24 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLoginButton() {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : _signInWithEmailAndPassword,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue[900], // Blue[900] button color
-        padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      ),
-      child: Text(
-        'Login',
-        style: TextStyle(
-          fontSize: 18,
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _signInWithEmailAndPassword,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue[900],
+          padding: EdgeInsets.symmetric(vertical: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+        ),
+        child: Text(
+          'Login',
+          style: TextStyle(
+            fontSize: 18,
+            color: buttonTextColor,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -253,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Text(
           "Don't have an account? ",
-          style: TextStyle(color: Colors.white), // White text for contrast
+          style: TextStyle(color: subHeadTextColor),
         ),
         TextButton(
           onPressed: () {
@@ -265,7 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Text(
             'Sign Up',
             style: TextStyle(
-              color: Colors.blue[900], // Blue[900] for sign-up text
+              color: Colors.blue[900],
               fontWeight: FontWeight.w600,
             ),
           ),

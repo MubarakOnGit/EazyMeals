@@ -1,7 +1,10 @@
+import 'package:eazy_meals/utils/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+import 'package:get/get.dart'; // Add GetX import
+import '../controllers/order_status_controller.dart';
 import '../screens/subscription_screen.dart'; // Adjust path as needed
 
 class HistoryScreen extends StatefulWidget {
@@ -12,6 +15,9 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final OrderController orderController = Get.put(
+    OrderController(),
+  ); // Initialize controller
   bool _isExpanded = false;
   bool _isDataMissing = false;
   final TextEditingController _nameController = TextEditingController();
@@ -152,16 +158,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
     User? user = _auth.currentUser;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(
           'Your Plan',
           style: TextStyle(
-            color: Colors.blue.shade900,
+            color: appbarMenuTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.transparent,
         centerTitle: true,
       ),
       body: Container(
@@ -169,7 +176,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.grey.shade900, Colors.grey.shade900],
+            colors: [backgroundColor, backgroundColor],
           ),
         ),
         child:
@@ -177,7 +184,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? Center(
                   child: Text(
                     'Please log in',
-                    style: TextStyle(color: Colors.white70, fontSize: 18),
+                    style: TextStyle(color: Colors.black38, fontSize: 18),
                   ),
                 )
                 : _isDataMissing
@@ -198,7 +205,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Colors.black,
                             ),
                           ),
                           SizedBox(height: 20),
@@ -207,12 +214,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             decoration: InputDecoration(
                               labelText: 'Name',
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.1),
+                              fillColor: Colors.white,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: Colors.black),
                           ),
                           SizedBox(height: 20),
                           TextField(
@@ -226,7 +233,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ),
                             ),
                             keyboardType: TextInputType.phone,
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: Colors.black),
                           ),
                           SizedBox(height: 20),
                           ElevatedButton(
@@ -321,7 +328,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         style: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.bold,
-          color: Colors.white,
+          color: headTextColor,
           letterSpacing: 0.5,
         ),
       ),
@@ -637,6 +644,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     }
                     final orders = snapshot.data!.docs;
                     if (orders.isEmpty) {
+                      orderController.updateOrderStatus(
+                        'No Order',
+                      ); // Update controller
                       return Text(
                         'No order for today',
                         style: TextStyle(color: Colors.white70),
@@ -644,6 +654,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     }
                     final order = orders.first.data() as Map<String, dynamic>;
                     final status = order['status'] ?? 'Unknown';
+                    orderController.updateOrderStatus(
+                      status,
+                    ); // Update controller
                     return _buildOrderTileWithStatus(order, status);
                   },
                 ),
@@ -939,7 +952,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       padding: EdgeInsets.all(16.0),
       child: Text(
         text,
-        style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
       ),
     );
   }

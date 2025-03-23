@@ -1,3 +1,4 @@
+import 'package:eazy_meals/utils/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'home_screen.dart'; // Adjust path as per your project structure
@@ -16,19 +17,32 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   final List<Widget> _screens = [
     HomeScreen(),
     MenuScreen(),
-    HistoryScreen(),
+    HistoryScreen(), // Assuming this is your "Plan" screen based on the label
     ProfileScreen(),
   ];
 
+  // Handle back button press
+  Future<bool> _onWillPop() async {
+    if (_currentIndex != 0) {
+      // If not on HomeScreen, switch to HomeScreen
+      setState(() {
+        _currentIndex = 0;
+      });
+      return false; // Prevent exiting the app
+    }
+    // If on HomeScreen, allow exit
+    return true; // Exit the app
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade900,
-      body: _screens[_currentIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(color: Colors.black),
-        child: BottomNavigationBar(
-          backgroundColor: Colors.grey.shade900,
+    return WillPopScope(
+      onWillPop: _onWillPop, // Intercept back button press
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        body: _screens[_currentIndex],
+        bottomNavigationBar: BottomNavigationBar(
+          backgroundColor: backgroundColor,
           currentIndex: _currentIndex,
           onTap: (index) {
             setState(() {

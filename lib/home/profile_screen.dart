@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:eazy_meals/utils/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -54,8 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 data.containsKey('studentDetails')
                     ? (data['studentDetails']['isVerified'] ?? false)
                     : false;
-            activeAddress =
-                data['activeAddress'] ?? '12 Food Street, Metro City';
+            activeAddress = data['activeAddress'] ?? 'Manage your addresses';
           });
         }
       } catch (e) {
@@ -102,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _launchWhatsApp() async {
-    const String phone = '+1234567890'; // Replace with your WhatsApp number
+    const String phone = '+995500900095'; // Replace with your WhatsApp number
     final Uri url = Uri.parse('https://wa.me/$phone');
     try {
       await launchUrl(url);
@@ -115,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _launchEmail() async {
     const String email =
-        'support@foodapp.com'; // Replace with your support email
+        'eazy.24@yandex.com'; // Replace with your support email
     final Uri url = Uri.parse('mailto:$email?subject=Feedback');
     try {
       await launchUrl(url);
@@ -159,17 +159,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    try {
-      await _auth.signOut();
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to logout: $e')));
-    }
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            backgroundColor: Colors.white,
+            title: Text(
+              'Confirm Logout',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade900,
+              ),
+            ),
+            content: Text(
+              'Are you sure you want to logout?',
+              style: TextStyle(color: Colors.grey[800]),
+            ),
+            actions: [
+              TextButton(
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.blue.shade900),
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade900,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text('Logout', style: TextStyle(color: Colors.white)),
+                onPressed: () async {
+                  Navigator.pop(context); // Close the dialog
+                  try {
+                    await _auth.signOut();
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginScreen()),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to logout: $e')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+    );
   }
 
   void _showEditProfileDialog() {
@@ -261,13 +303,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: backgroundColor,
       body:
           _isLoading
               ? Center(child: CircularProgressIndicator())
               : CustomScrollView(
                 slivers: [
                   SliverAppBar(
+                    leading: null,
                     expandedHeight: 250,
                     floating: false,
                     pinned: true,
@@ -439,33 +482,42 @@ class ProfileSectionCard extends StatelessWidget {
       elevation: 4,
       margin: EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      color: Colors.grey[850],
-      child: ListTile(
-        leading: Container(
-          padding: EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade900.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: Colors.blue.shade900, size: 28),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: 16,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade500, Colors.blue.shade900],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: Colors.grey[400], fontSize: 14),
-        ),
-        onTap: onTap,
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          color: Colors.grey[600],
-          size: 16,
+        child: ListTile(
+          leading: Container(
+            padding: EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade700,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Colors.blue.shade900, size: 28),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[400], fontSize: 14),
+          ),
+          onTap: onTap,
+          trailing: Icon(
+            Icons.arrow_forward_ios,
+            color: Colors.grey[600],
+            size: 16,
+          ),
         ),
       ),
     );

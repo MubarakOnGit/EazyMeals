@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../screens/subscription_screen.dart';
+import '../utils/theme.dart';
 import 'view_all_screen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -527,7 +528,7 @@ class _MenuScreenState extends State<MenuScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: BouncingScrollPhysics(),
@@ -544,13 +545,16 @@ class _MenuScreenState extends State<MenuScreen> {
                       children: [
                         Text(
                           _formatDate(_currentDate),
-                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          style: TextStyle(
+                            color: subHeadTextColor,
+                            fontSize: 16,
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
                           _getRelativeDayText(_currentDayIndex),
                           style: TextStyle(
-                            color: Colors.white,
+                            color: headTextColor,
                             fontSize: 30,
                             fontWeight: FontWeight.bold,
                           ),
@@ -673,7 +677,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     Text(
                       'Menu',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: headTextColor,
                         fontSize: 30,
                         fontWeight: FontWeight.bold,
                       ),
