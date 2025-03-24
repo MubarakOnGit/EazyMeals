@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
-import 'VerificationScreen.dart';
+import 'verification_screen.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
 

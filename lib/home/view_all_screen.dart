@@ -2,16 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:eazy_meals/utils/menu_utils.dart'; // Adjust path
 
 class ViewAllScreen extends StatefulWidget {
+  const ViewAllScreen({super.key});
+
   @override
-  _ViewAllScreenState createState() => _ViewAllScreenState();
+  State<ViewAllScreen> createState() => _ViewAllScreenState();
 }
 
 class _ViewAllScreenState extends State<ViewAllScreen> {
   final ScrollController _scrollController = ScrollController();
-  final int currentDayIndex = 7;
+  final int _currentDayIndex = 7; // Renamed to follow Dart naming conventions
   String _selectedCategory = 'Veg';
-  final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
-  DateTime _baseDate = DateTime.now().subtract(Duration(days: 7));
+  final List<String> _categories = const [
+    'Veg',
+    'South Indian',
+    'North Indian',
+  ];
+  final DateTime _baseDate = DateTime.now().subtract(const Duration(days: 7));
   Map<String, Map<String, dynamic>> _menuCache = {};
 
   @override
@@ -19,7 +25,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
     super.initState();
     _fetchMenuData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.jumpTo(currentDayIndex * 160.0);
+      _scrollController.jumpTo(_currentDayIndex * 160.0);
     });
   }
 
@@ -37,7 +43,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Soft off-white background
+      backgroundColor: const Color(0xFFF8FAFC),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -75,47 +81,49 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children:
-                        _categories.map((category) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeInOut,
-                              child: FilterChip(
-                                label: Text(category),
-                                selected: _selectedCategory == category,
-                                onSelected:
-                                    (selected) => setState(
-                                      () => _selectedCategory = category,
+                        _categories
+                            .map(
+                              (category) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  curve: Curves.easeInOut,
+                                  child: FilterChip(
+                                    label: Text(category),
+                                    selected: _selectedCategory == category,
+                                    onSelected:
+                                        (selected) => setState(
+                                          () => _selectedCategory = category,
+                                        ),
+                                    backgroundColor: Colors.indigo[50],
+                                    selectedColor: Colors.blue.shade900,
+                                    checkmarkColor: Colors.white,
+                                    labelPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 2,
                                     ),
-                                backgroundColor: Colors.indigo[50],
-                                selectedColor: Colors.indigo[600],
-                                checkmarkColor: Colors.white,
-                                labelPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 2,
-                                ),
-                                labelStyle: TextStyle(
-                                  color:
-                                      _selectedCategory == category
-                                          ? Colors.white
-                                          : Colors.indigo[800],
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                  side: BorderSide(
-                                    color: Colors.indigo[200]!,
-                                    width: 1,
+                                    labelStyle: TextStyle(
+                                      color:
+                                          _selectedCategory == category
+                                              ? Colors.white
+                                              : Colors.blue.shade900,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                      side: BorderSide(
+                                        color: Colors.indigo[200]!,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    elevation:
+                                        _selectedCategory == category ? 3 : 0,
                                   ),
                                 ),
-                                elevation:
-                                    _selectedCategory == category ? 3 : 0,
                               ),
-                            ),
-                          );
-                        }).toList(),
+                            )
+                            .toList(),
                   ),
                 ),
               ),
@@ -125,7 +133,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {
-                DateTime date = _baseDate.add(Duration(days: index));
+                final date = _baseDate.add(Duration(days: index));
                 final menu = _menuCache[_selectedCategory] ?? {};
                 final items = menu['items'] as List<dynamic>? ?? [];
                 final dateStr = MenuUtils.getDateString(date);
@@ -139,13 +147,6 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
                       item['mealType'] == 'Dinner' && item['date'] == dateStr,
                   orElse: () => {'item': 'Not Available'},
                 );
-                print(
-                  'ViewAllScreen Lunch for $_selectedCategory on $dateStr: ${lunchItem['item']}',
-                );
-                print(
-                  'ViewAllScreen Dinner for $_selectedCategory on $dateStr: ${dinnerItem['item']}',
-                );
-
                 return _buildDaySection(
                   dateStr,
                   lunchItem['item'],
@@ -176,7 +177,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: Colors.indigo[900],
+              color: Colors.blue.shade900,
             ),
           ),
           const SizedBox(height: 12),
@@ -198,10 +199,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                Colors.blue.shade700, // Changed to blue shade 700
-                Colors.blue.shade900, // Changed to blue shade 900
-              ],
+              colors: [Colors.blue[700]!, Colors.blue[900]!],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -214,7 +212,7 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withAlpha(51), // 0.2 -> 51
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -246,17 +244,17 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
                           ),
                           decoration: BoxDecoration(
                             color:
-                                index == currentDayIndex
+                                index == _currentDayIndex
                                     ? Colors.blue[200]
-                                    : index < currentDayIndex
+                                    : index < _currentDayIndex
                                     ? Colors.red[200]
                                     : Colors.green[200],
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            index == currentDayIndex
+                            index == _currentDayIndex
                                 ? 'Today'
-                                : index < currentDayIndex
+                                : index < _currentDayIndex
                                 ? 'Past'
                                 : 'Upcoming',
                             style: TextStyle(
@@ -272,10 +270,10 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
                     Text(
                       item,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withAlpha(230),
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
-                      ),
+                      ), // 0.9 -> 230
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -1,33 +1,39 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Correct import
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
-import 'package:eazy_meals/utils/menu_utils.dart'; // Adjust path
+import 'package:path_provider/path_provider.dart';
+import '../utils/menu_utils.dart'; // Adjust path
+import '../controllers/pause_play_controller.dart';
 
 class MenuScreen extends StatefulWidget {
+  const MenuScreen({super.key});
+
   @override
-  _MenuScreenState createState() => _MenuScreenState();
+  State<MenuScreen> createState() => _MenuScreenState();
 }
 
 class _MenuScreenState extends State<MenuScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FlutterSecureStorage _storage = FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
+  final PausePlayController pausePlayController =
+      Get.find<PausePlayController>();
   DateTime _currentDate = DateTime.now();
   int _currentDayIndex = 7;
-  final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
+  final List<String> _categories = const [
+    'Veg',
+    'South Indian',
+    'North Indian',
+  ];
   bool _activeSubscription = false;
   DateTime? _subscriptionStartDate;
-  DateTime? _subscriptionEndDate;
-  bool _isPaused = false;
   int _remainingSeconds = 0;
   Timer? _timer;
-  DateTime? _pauseStartTime;
   List<Map<String, String>> dates = [];
   final double itemWidth = 80.0;
   Map<String, bool> expandedCards = {
@@ -42,13 +48,12 @@ class _MenuScreenState extends State<MenuScreen> {
   void initState() {
     super.initState();
     _scheduleDailyUpdate();
-    _schedulePauseCheck();
     _loadInitialState();
     _loadProfileImage();
     dates = _generateDates();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _scrollToCurrentDay();
-      _fetchMenuData();
+      await _fetchMenuData();
     });
     _scrollController.addListener(_handleScroll);
   }
@@ -63,13 +68,12 @@ class _MenuScreenState extends State<MenuScreen> {
     );
 
     if (newIndex != _currentDayIndex) {
-      setState(() {
-        _currentDayIndex = newIndex;
-        _currentDate = DateTime.now()
-            .subtract(Duration(days: 7))
-            .add(Duration(days: _currentDayIndex));
-        _fetchMenuData();
-      });
+      _currentDayIndex = newIndex;
+      _currentDate = DateTime.now()
+          .subtract(const Duration(days: 7))
+          .add(Duration(days: _currentDayIndex));
+      _fetchMenuData();
+      setState(() {});
     }
   }
 
@@ -81,12 +85,14 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Future<void> _fetchMenuData() async {
-    String dateStr = MenuUtils.getDateString(_currentDate);
-    _menuCache = await MenuUtils.fetchMenuData(
-      baseDate: _currentDate,
-      dateFilter: dateStr,
-    );
-    if (mounted) setState(() {});
+    final dateStr = MenuUtils.getDateString(_currentDate);
+    if (_menuCache[dateStr] == null) {
+      _menuCache = await MenuUtils.fetchMenuData(
+        baseDate: _currentDate,
+        dateFilter: dateStr,
+      );
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -97,11 +103,11 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   List<Map<String, String>> _generateDates() {
-    List<Map<String, String>> dates = [];
-    DateTime baseDate = DateTime.now();
-    DateTime startDate = baseDate.subtract(Duration(days: 7));
+    final List<Map<String, String>> dates = [];
+    final baseDate = DateTime.now();
+    final startDate = baseDate.subtract(const Duration(days: 7));
     for (int i = 0; i < 35; i++) {
-      DateTime date = startDate.add(Duration(days: i));
+      final date = startDate.add(Duration(days: i));
       dates.add({
         'day': date.day.toString(),
         'weekday': _getWeekday(date.weekday),
@@ -112,54 +118,43 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   String _getWeekday(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Monday';
-      case 2:
-        return 'Tuesday';
-      case 3:
-        return 'Wednesday';
-      case 4:
-        return 'Thursday';
-      case 5:
-        return 'Friday';
-      case 6:
-        return 'Saturday';
-      case 7:
-        return 'Sunday';
-      default:
-        return '';
-    }
+    return const [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ][weekday - 1];
   }
 
   Future<void> _loadInitialState() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
-      DocumentSnapshot doc =
-          await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _activeSubscription = data['activeSubscription'] ?? false;
-          _subscriptionStartDate =
-              data['subscriptionStartDate'] != null
-                  ? (data['subscriptionStartDate'] as Timestamp).toDate()
-                  : null;
-          _subscriptionEndDate =
-              data['subscriptionEndDate'] != null
-                  ? (data['subscriptionEndDate'] as Timestamp).toDate()
-                  : null;
-          _isPaused = data['isPaused'] ?? false;
-          _pauseStartTime =
-              data['pausedAt'] != null
-                  ? (data['pausedAt'] as Timestamp).toDate()
-                  : null;
-          if (_activeSubscription && _subscriptionEndDate != null) {
-            _remainingSeconds =
-                _subscriptionEndDate!.difference(_currentDate).inSeconds;
-            if (_remainingSeconds > 0 && !_isPaused) _startTimer();
-          }
-        });
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          final data = doc.data() ?? {};
+          setState(() {
+            _activeSubscription = data['activeSubscription'] ?? false;
+            _subscriptionStartDate =
+                data['subscriptionStartDate'] != null
+                    ? (data['subscriptionStartDate'] as Timestamp).toDate()
+                    : null;
+            if (_activeSubscription &&
+                pausePlayController.subscriptionEndDate.value != null) {
+              _remainingSeconds =
+                  pausePlayController.subscriptionEndDate.value!
+                      .difference(DateTime.now())
+                      .inSeconds;
+              if (_remainingSeconds > 0 && !pausePlayController.isPaused.value)
+                _startTimer();
+            }
+          });
+        }
+      } catch (e) {
+        print('Error loading initial state: $e');
       }
     }
   }
@@ -169,42 +164,19 @@ class _MenuScreenState extends State<MenuScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final imagePath = '${directory.path}/profile_image.jpg';
       final file = File(imagePath);
-      if (await file.exists()) setState(() => _profileImage = file);
+      if (await file.exists() && mounted) {
+        setState(() => _profileImage = file);
+      }
     } catch (e) {
       print('Error loading profile image: $e');
     }
   }
 
-  Future<String?> _getLocalImagePath(String url, String key) async {
-    if (url.isEmpty) return null;
-    final storedUrl = await _storage.read(key: key);
-    final directory = await getApplicationDocumentsDirectory();
-    final fileName = url.hashCode.toString();
-    final filePath = '${directory.path}/$fileName.jpg';
-    final file = File(filePath);
-
-    if (storedUrl == url && file.existsSync()) {
-      return filePath;
-    } else if (storedUrl != url) {
-      try {
-        final response = await http.get(Uri.parse(url));
-        if (response.statusCode == 200) {
-          await file.writeAsBytes(response.bodyBytes);
-          await _storage.write(key: key, value: url);
-          return filePath;
-        }
-      } catch (e) {
-        print('Error downloading image for $key: $e');
-      }
-    }
-    return null;
-  }
-
   void _startTimer() {
     _timer?.cancel();
-    if (_remainingSeconds > 0 && !_isPaused) {
-      _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-        if (mounted && !_isPaused) {
+    if (_remainingSeconds > 0 && !pausePlayController.isPaused.value) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted && !pausePlayController.isPaused.value) {
           setState(() {
             _remainingSeconds--;
             if (_remainingSeconds <= 0) {
@@ -220,11 +192,10 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Future<void> _deactivateSubscription() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
-      final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data() ?? {};
       if (userData['activeSubscription'] == true) {
         await _firestore
             .collection('users')
@@ -244,10 +215,12 @@ class _MenuScreenState extends State<MenuScreen> {
           'isPaused': FieldValue.delete(),
           'pausedAt': FieldValue.delete(),
         });
-        setState(() {
-          _activeSubscription = false;
-          _timer?.cancel();
-        });
+        if (mounted) {
+          setState(() {
+            _activeSubscription = false;
+            _timer?.cancel();
+          });
+        }
       }
     }
   }
@@ -255,175 +228,22 @@ class _MenuScreenState extends State<MenuScreen> {
   void _scheduleDailyUpdate() {
     final now = DateTime.now();
     var scheduledTime = DateTime(now.year, now.month, now.day, 21, 0);
-    if (now.isAfter(scheduledTime))
-      scheduledTime = scheduledTime.add(Duration(days: 1));
+    if (now.isAfter(scheduledTime)) {
+      scheduledTime = scheduledTime.add(const Duration(days: 1));
+    }
     final duration = scheduledTime.difference(now);
-    Future.delayed(duration, () {
+    Timer(duration, () {
       if (mounted) {
-        setState(() {
-          _currentDate = DateTime.now();
-          _fetchMenuData();
-        });
+        _currentDate = DateTime.now();
+        _fetchMenuData();
+        setState(() {});
         _scheduleDailyUpdate();
       }
     });
   }
 
-  void _schedulePauseCheck() {
-    final now = DateTime.now();
-    var next930PM = DateTime(now.year, now.month, now.day, 21, 30);
-    if (now.isAfter(next930PM)) next930PM = next930PM.add(Duration(days: 1));
-    final duration = next930PM.difference(now);
-    Timer(duration, () async {
-      User? user = _auth.currentUser;
-      if (user != null) {
-        DocumentSnapshot doc =
-            await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists &&
-            doc['activeSubscription'] == true &&
-            doc['isPaused'] == true) {
-          await _markNextDayPaused(user.uid);
-        }
-      }
-      if (mounted) _schedulePauseCheck();
-    });
-  }
-
-  bool _canPauseOrPlay() {
-    final now = DateTime.now();
-    final hour = now.hour;
-    return _activeSubscription && (hour >= 9 && hour < 22);
-  }
-
-  Future<void> _togglePausePlay() async {
-    User? user = _auth.currentUser;
-    if (user == null || !_activeSubscription || _subscriptionEndDate == null)
-      return;
-    bool newIsPaused = !_isPaused;
-    if (_canPauseOrPlay()) {
-      setState(() {
-        if (_isPaused) {
-          if (_pauseStartTime != null) {
-            final pausedDuration =
-                DateTime.now().difference(_pauseStartTime!).inSeconds;
-            _subscriptionEndDate = _subscriptionEndDate!.add(
-              Duration(seconds: pausedDuration),
-            );
-            _remainingSeconds =
-                _subscriptionEndDate!.difference(_currentDate).inSeconds;
-            _isPaused = false;
-            _pauseStartTime = null;
-            _startTimer();
-          }
-        } else {
-          _isPaused = true;
-          _pauseStartTime = DateTime.now();
-          _timer?.cancel();
-        }
-      });
-      try {
-        await _firestore.collection('users').doc(user.uid).update({
-          'isPaused': newIsPaused,
-          'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
-          'subscriptionEndDate': Timestamp.fromDate(_subscriptionEndDate!),
-        });
-        if (newIsPaused) {
-          await _markNextDayPaused(user.uid);
-        } else {
-          await _resumeNextDay(user.uid);
-        }
-      } catch (e) {
-        print('Error in togglePausePlay: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update subscription status')),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You can only pause or play between 9 AM - 10 PM'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _markNextDayPaused(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-    QuerySnapshot orders =
-        await _firestore
-            .collection('orders')
-            .where('userId', isEqualTo: userId)
-            .where('status', isEqualTo: 'Pending Delivery')
-            .where(
-              'date',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-            )
-            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
-            .get();
-    for (var order in orders.docs) {
-      await order.reference.update({'status': 'Paused'});
-    }
-  }
-
-  Future<void> _resumeNextDay(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-    QuerySnapshot orders =
-        await _firestore
-            .collection('orders')
-            .where('userId', isEqualTo: userId)
-            .where('status', isEqualTo: 'Paused')
-            .where(
-              'date',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-            )
-            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
-            .get();
-    for (var order in orders.docs) {
-      await order.reference.update({'status': 'Pending Delivery'});
-    }
-  }
-
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
     const months = [
       'Jan',
       'Feb',
@@ -442,72 +262,48 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   String _getRelativeDayText(int index) {
-    int diff = index - 7;
+    final diff = index - 7;
     if (diff == 0) return 'Today';
     if (diff == -1) return 'Yesterday';
     if (diff == 1) return 'Tomorrow';
-    int weekDiff = (diff / 7).floor();
+    final weekDiff = (diff / 7).floor();
     if (diff > 0) {
-      switch (weekDiff) {
-        case 0:
-          return 'This Week';
-        case 1:
-          return 'Next Week';
-        case 2:
-          return 'Third Week';
-        case 3:
-          return 'Fourth Week';
-        default:
-          return 'Future';
-      }
+      return const {
+            0: 'This Week',
+            1: 'Next Week',
+            2: 'Third Week',
+            3: 'Fourth Week',
+          }[weekDiff] ??
+          'Future';
     } else {
-      switch (weekDiff.abs()) {
-        case 0:
-          return 'This Week';
-        case 1:
-          return 'Last Week';
-        default:
-          return 'Past';
-      }
+      final absWeekDiff = weekDiff.abs();
+      return const {0: 'This Week', 1: 'Last Week'}[absWeekDiff] ?? 'Past';
     }
   }
 
-  double _getStartingProgress() {
-    if (!_activeSubscription ||
-        _subscriptionStartDate == null ||
-        _subscriptionEndDate == null)
-      return 1.0;
-    final totalDuration =
-        _subscriptionEndDate!.difference(_subscriptionStartDate!).inSeconds;
-    final elapsed = _currentDate.difference(_subscriptionStartDate!).inSeconds;
-    return (totalDuration - elapsed) / totalDuration;
-  }
-
   void _scrollToDate(int index) {
-    setState(() {
-      _currentDayIndex = index;
-      _currentDate = DateTime.now()
-          .subtract(Duration(days: 7))
-          .add(Duration(days: _currentDayIndex));
-      _fetchMenuData();
-    });
+    _currentDayIndex = index;
+    _currentDate = DateTime.now()
+        .subtract(const Duration(days: 7))
+        .add(Duration(days: _currentDayIndex));
+    _fetchMenuData();
     final targetOffset = itemWidth * (index - 2);
     _scrollController.animateTo(
       targetOffset.clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOut,
     );
+    setState(() {});
   }
 
-  String _formatRemainingDays(int seconds) {
-    final days = (seconds ~/ (24 * 3600)).toString();
-    return '$days days';
-  }
+  String _formatRemainingDays(int seconds) =>
+      '${(seconds ~/ (24 * 3600))} days';
 
   @override
   Widget build(BuildContext context) {
-    if (dates.isEmpty)
+    if (dates.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: Colors.blue));
+    }
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -524,28 +320,32 @@ class _MenuScreenState extends State<MenuScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _formatDate(_currentDate),
-                              style: TextStyle(
-                                color: Colors.blue[900],
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatDate(_currentDate),
+                                style: TextStyle(
+                                  color: Colors.blue[900],
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _getRelativeDayText(_currentDayIndex),
-                              style: TextStyle(
-                                color: Colors.blue[900],
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.5,
+                              const SizedBox(height: 6),
+                              Text(
+                                _getRelativeDayText(_currentDayIndex),
+                                style: TextStyle(
+                                  color: Colors.blue[900],
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
@@ -557,7 +357,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.blue.withOpacity(0.1),
+                                color: Colors.blue.withAlpha(26),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -589,7 +389,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.blue.withOpacity(0.2),
+                              color: Colors.blue.withAlpha(51),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -605,63 +405,77 @@ class _MenuScreenState extends State<MenuScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[700]!.withOpacity(
-                                          0.2,
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[700]!.withAlpha(
+                                            51,
+                                          ),
+                                          shape: BoxShape.circle,
                                         ),
-                                        shape: BoxShape.circle,
+                                        child: Icon(
+                                          Icons.subscriptions,
+                                          color: Colors.blue[800],
+                                          size: 20,
+                                        ),
                                       ),
-                                      child: Icon(
-                                        Icons.subscriptions,
-                                        color: Colors.blue[800],
-                                        size: 20,
+                                      const SizedBox(width: 12),
+                                      Flexible(
+                                        child: Text(
+                                          'Your Subscription',
+                                          style: TextStyle(
+                                            color: Colors.blue[900],
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Your Subscription',
-                                      style: TextStyle(
-                                        color: Colors.blue[900],
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                                 GestureDetector(
-                                  onTap: _togglePausePlay,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          _isPaused
-                                              ? Colors.red[600]
-                                              : Colors.green[600],
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: (_isPaused
-                                                  ? Colors.red
-                                                  : Colors.green)
-                                              .withOpacity(0.3),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 2),
+                                  onTap:
+                                      () => pausePlayController.togglePausePlay(
+                                        _activeSubscription,
+                                      ),
+                                  child: Obx(
+                                    () => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            pausePlayController.isPaused.value
+                                                ? Colors.red[600]
+                                                : Colors.green[600],
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (pausePlayController
+                                                        .isPaused
+                                                        .value
+                                                    ? Colors.red
+                                                    : Colors.green)
+                                                .withAlpha(77),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        pausePlayController.isPaused.value
+                                            ? 'Resume'
+                                            : 'Pause',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
                                         ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      _isPaused ? 'Resume' : 'Pause',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
@@ -677,12 +491,15 @@ class _MenuScreenState extends State<MenuScreen> {
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Start: ${_subscriptionStartDate != null ? _formatDate(_subscriptionStartDate!) : 'N/A'}',
-                                  style: TextStyle(
-                                    color: Colors.blue[800],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                Expanded(
+                                  child: Text(
+                                    'Start: ${_formatDate(_subscriptionStartDate)}',
+                                    style: TextStyle(
+                                      color: Colors.blue[800],
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -696,12 +513,17 @@ class _MenuScreenState extends State<MenuScreen> {
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'End: ${_subscriptionEndDate != null ? _formatDate(_subscriptionEndDate!) : 'N/A'}',
-                                  style: TextStyle(
-                                    color: Colors.blue[800],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                Expanded(
+                                  child: Obx(
+                                    () => Text(
+                                      'End: ${_formatDate(pausePlayController.subscriptionEndDate.value)}',
+                                      style: TextStyle(
+                                        color: Colors.blue[800],
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -715,12 +537,15 @@ class _MenuScreenState extends State<MenuScreen> {
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Remaining: ${_remainingSeconds > 0 ? _formatRemainingDays(_remainingSeconds) : 'Expired'}',
-                                  style: TextStyle(
-                                    color: Colors.blue[800],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                Expanded(
+                                  child: Text(
+                                    'Remaining: ${_remainingSeconds > 0 ? _formatRemainingDays(_remainingSeconds) : 'Expired'}',
+                                    style: TextStyle(
+                                      color: Colors.blue[800],
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -728,26 +553,33 @@ class _MenuScreenState extends State<MenuScreen> {
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Icon(
-                                  _isPaused
-                                      ? Icons.pause_circle_outline
-                                      : Icons.play_circle_filled,
-                                  color:
-                                      _isPaused
-                                          ? Colors.red[600]
-                                          : Colors.green[600],
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Status: ${_isPaused ? 'Paused' : 'Ongoing'}',
-                                  style: TextStyle(
+                                Obx(
+                                  () => Icon(
+                                    pausePlayController.isPaused.value
+                                        ? Icons.pause_circle_outline
+                                        : Icons.play_circle_filled,
                                     color:
-                                        _isPaused
+                                        pausePlayController.isPaused.value
                                             ? Colors.red[600]
                                             : Colors.green[600],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Obx(
+                                    () => Text(
+                                      'Status: ${pausePlayController.isPaused.value ? 'Paused' : 'Ongoing'}',
+                                      style: TextStyle(
+                                        color:
+                                            pausePlayController.isPaused.value
+                                                ? Colors.red[600]
+                                                : Colors.green[600],
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -769,26 +601,32 @@ class _MenuScreenState extends State<MenuScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
+                      color: Colors.grey.withAlpha(26),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: ListView.builder(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  itemCount: dates.length,
-                  itemBuilder:
-                      (context, index) => GestureDetector(
-                        onTap: () => _scrollToDate(index),
-                        child: _buildDateItem(
-                          dates[index]['day']!,
-                          dates[index]['weekday']!,
-                          index == _currentDayIndex,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    itemCount: dates.length,
+                    itemBuilder:
+                        (context, index) => SizedBox(
+                          width: itemWidth,
+                          child: GestureDetector(
+                            onTap: () => _scrollToDate(index),
+                            child: _buildDateItem(
+                              dates[index]['day']!,
+                              dates[index]['weekday']!,
+                              index == _currentDayIndex,
+                            ),
+                          ),
                         ),
-                      ),
+                  ),
                 ),
               ),
             ),
@@ -799,12 +637,15 @@ class _MenuScreenState extends State<MenuScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Daily Menu',
-                        style: TextStyle(
-                          color: Colors.blue[900],
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Text(
+                          'Daily Menu',
+                          style: TextStyle(
+                            color: Colors.blue[900],
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       GestureDetector(
@@ -831,9 +672,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  ..._categories
-                      .map((category) => _buildMenuCard(category))
-                      .toList(),
+                  ..._categories.map((category) => _buildMenuCard(category)),
                 ]),
               ),
             ),
@@ -855,7 +694,7 @@ class _MenuScreenState extends State<MenuScreen> {
             isCurrent
                 ? [
                   BoxShadow(
-                    color: Colors.blue.withOpacity(0.2),
+                    color: Colors.blue.withAlpha(51),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -884,12 +723,14 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
           if (isCurrent) ...[
             const SizedBox(height: 8),
-            Container(
+            const SizedBox(
               width: 6,
               height: 6,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -919,7 +760,7 @@ class _MenuScreenState extends State<MenuScreen> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.blue.withOpacity(0.15),
+                  color: Colors.blue.withAlpha(38),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -932,30 +773,35 @@ class _MenuScreenState extends State<MenuScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(51),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.restaurant_menu,
+                              size: 20,
+                              color: Colors.white,
+                            ),
                           ),
-                          child: Icon(
-                            Icons.restaurant_menu,
-                            size: 20,
-                            color: Colors.white,
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              category,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          category,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     GestureDetector(
                       onTap:
@@ -1003,7 +849,7 @@ class _MenuScreenState extends State<MenuScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withAlpha(51),
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -1046,7 +892,7 @@ class _MenuScreenState extends State<MenuScreen> {
         Text(
           '$mealType Image',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withAlpha(204),
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -1087,7 +933,7 @@ class _MenuTextWidget extends StatelessWidget {
     return Text(
       item['item'],
       style: TextStyle(
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withAlpha(230),
         fontSize: 14,
         fontWeight: FontWeight.w400,
       ),
@@ -1111,15 +957,15 @@ class _MenuImageWidget extends StatefulWidget {
   });
 
   @override
-  __MenuImageWidgetState createState() => __MenuImageWidgetState();
+  State<_MenuImageWidget> createState() => _MenuImageWidgetState();
 }
 
-class __MenuImageWidgetState extends State<_MenuImageWidget> {
-  final FlutterSecureStorage _storage = FlutterSecureStorage();
+class _MenuImageWidgetState extends State<_MenuImageWidget> {
+  final storage = const FlutterSecureStorage(); // Correct instantiation
 
   Future<String?> _getLocalImagePath(String url, String key) async {
     if (url.isEmpty) return null;
-    final storedUrl = await _storage.read(key: key);
+    final storedUrl = await storage.read(key: key);
     final directory = await getApplicationDocumentsDirectory();
     final fileName = url.hashCode.toString();
     final filePath = '${directory.path}/$fileName.jpg';
@@ -1131,11 +977,11 @@ class __MenuImageWidgetState extends State<_MenuImageWidget> {
         final response = await http.get(Uri.parse(url));
         if (response.statusCode == 200) {
           await file.writeAsBytes(response.bodyBytes);
-          await _storage.write(key: key, value: url);
+          await storage.write(key: key, value: url);
           return filePath;
         }
       } catch (e) {
-        print('Error downloading image for $key: $e');
+        print('Error loading image: $e');
       }
     }
     return null;
@@ -1169,14 +1015,14 @@ class __MenuImageWidgetState extends State<_MenuImageWidget> {
               width: 150,
               height: 150,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: Text(
                   'No Image',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withAlpha(153),
                     fontSize: 14,
                   ),
                 ),

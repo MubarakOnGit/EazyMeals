@@ -7,18 +7,20 @@ import '../controllers/order_status_controller.dart';
 import '../screens/subscription_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
+
   @override
-  _HistoryScreenState createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OrderController orderController = Get.find<OrderController>();
-  bool _isDataMissing = false;
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  Map<String, bool> _expandedCards = {};
+  bool _isDataMissing = false;
+  final Map<String, bool> _expandedCards = {};
 
   @override
   void initState() {
@@ -30,7 +32,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void _scheduleOrderCancellation() {
     final now = DateTime.now();
     var next12PM = DateTime(now.year, now.month, now.day, 12, 0);
-    if (now.isAfter(next12PM)) next12PM = next12PM.add(Duration(days: 1));
+    if (now.isAfter(next12PM)) next12PM = next12PM.add(const Duration(days: 1));
     final duration = next12PM.difference(now);
 
     Timer(duration, () async {
@@ -40,18 +42,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _cancelPendingOrders() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
       final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
-      final userData = userDoc.data() as Map<String, dynamic>? ?? {};
-      String subscriptionId = userData['subscriptionId'] as String? ?? '';
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data() ?? {};
+      final subscriptionId = userData['subscriptionId'] as String? ?? '';
 
-      QuerySnapshot orders =
+      final orders =
           await _firestore
               .collection('orders')
               .where('userId', isEqualTo: user.uid)
@@ -73,29 +74,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _checkUserData() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
-      final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data() ?? {};
       final name = userData['name'] as String?;
       final phone = userData['phone'] as String?;
 
-      if (name == null || phone == null || name.isEmpty || phone.isEmpty) {
-        setState(() => _isDataMissing = true);
-      } else {
-        setState(() => _isDataMissing = false);
+      if (mounted) {
+        setState(
+          () =>
+              _isDataMissing =
+                  name == null ||
+                  phone == null ||
+                  name.isEmpty ||
+                  phone.isEmpty,
+        );
       }
     }
   }
 
   Future<void> _saveUserData() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
       if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Please fill in all fields')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please fill in all fields')),
+          );
+        }
         return;
       }
 
@@ -104,27 +111,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
         'phone': _phoneController.text.trim(),
       }, SetOptions(merge: true));
 
-      setState(() => _isDataMissing = false);
+      if (mounted) setState(() => _isDataMissing = false);
     }
   }
 
   Future<void> _cancelPendingSubscription(String userId, String docId) async {
-    bool? confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('Confirm Cancellation'),
-            content: Text(
+            title: const Text('Confirm Cancellation'),
+            content: const Text(
               'Are you sure you want to cancel this pending subscription?',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: Text('No'),
+                child: const Text('No'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: Text('Yes'),
+                child: const Text('Yes'),
               ),
             ],
           ),
@@ -137,9 +144,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           .collection('pendingOrders')
           .doc(docId)
           .delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pending subscription cancelled successfully')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pending subscription cancelled successfully'),
+          ),
+        );
+      }
     }
   }
 
@@ -169,14 +180,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  String _formatRemainingDays(int seconds) {
-    final days = (seconds ~/ (24 * 3600)).toString();
-    return '$days days';
-  }
+  String _formatRemainingDays(int seconds) =>
+      '${(seconds ~/ (24 * 3600))} days';
 
   @override
   Widget build(BuildContext context) {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -188,15 +197,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.blue.shade900.withOpacity(0.1),
+                  Colors.blue[900]!.withAlpha(26),
                   Colors.grey[100]!,
-                ],
+                ], // 0.1 -> 26
               ),
             ),
           ),
           SafeArea(
             child: CustomScrollView(
-              physics: BouncingScrollPhysics(),
+              physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverAppBar(
                   backgroundColor: Colors.transparent,
@@ -204,9 +213,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   pinned: true,
                   flexibleSpace: FlexibleSpaceBar(
                     title: Text(
-                      'Your Journey',
+                      'Your Plans',
                       style: TextStyle(
-                        color: Colors.blue.shade900,
+                        color: Colors.blue[900],
                         fontWeight: FontWeight.w700,
                         fontSize: 24,
                       ),
@@ -235,7 +244,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       as Map<String, dynamic>? ??
                                   {};
                               return Padding(
-                                padding: EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -244,7 +253,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       _buildPendingSubscriptions(user.uid),
                                       Colors.orange,
                                     ),
-                                    SizedBox(height: 24),
+                                    const SizedBox(height: 24),
                                     _buildSubscriptionSection(
                                       'Active Plan',
                                       _buildActiveSubscription(
@@ -253,13 +262,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       ),
                                       Colors.green,
                                     ),
-                                    SizedBox(height: 24),
+                                    const SizedBox(height: 24),
                                     _buildSubscriptionSection(
                                       'Past Plans',
                                       _buildEndedSubscriptions(user.uid),
                                       Colors.red,
                                     ),
-                                    SizedBox(height: 80),
+                                    const SizedBox(height: 80),
                                   ],
                                 ),
                               );
@@ -282,15 +291,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         builder: (context) => SubscriptionScreen(),
                       ),
                     ).then((_) => setState(() {})),
-                label: Text(
+                label: const Text(
                   'New Plan',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                icon: Icon(Icons.add, color: Colors.white),
-                backgroundColor: Colors.blue.shade900,
+                icon: const Icon(Icons.add, color: Colors.white),
+                backgroundColor: Colors.blue[900],
                 elevation: 8,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -312,17 +321,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: 8, bottom: 12),
+          padding: const EdgeInsets.only(left: 8, bottom: 12),
           child: Row(
             children: [
               Container(width: 4, height: 24, color: accentColor),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
                 title,
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: Colors.blue.shade900,
+                  color: Colors.blue[900],
                 ),
               ),
             ],
@@ -363,12 +372,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   header: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.pending_actions,
                         color: Colors.orange,
                         size: 20,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Text(
                         'Pending',
                         style: TextStyle(
@@ -385,21 +394,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     _buildDetailRow(
                       Icons.fingerprint,
                       'ID: $orderId',
-                      Colors.grey.shade700,
+                      Colors.grey[700]!,
                     ),
                     _buildDetailRow(
                       Icons.calendar_today,
                       'Requested: ${_formatDate(createdAt)}',
-                      Colors.grey.shade700,
+                      Colors.grey[700]!,
                     ),
                     _buildDetailRow(
                       Icons.attach_money,
                       '\$${data['amount']}',
-                      Colors.grey.shade700,
+                      Colors.grey[700]!,
                     ),
                   ],
                   action: IconButton(
-                    icon: Icon(Icons.cancel, color: Colors.redAccent),
+                    icon: const Icon(Icons.cancel, color: Colors.redAccent),
                     onPressed: () => _cancelPendingSubscription(userId, doc.id),
                   ),
                 );
@@ -430,15 +439,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return _buildCard(
       gradient: LinearGradient(
-        colors: [Colors.blue.shade900, Colors.blue.shade700],
+        colors: [Colors.blue[900]!, Colors.blue[700]!],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       header: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.subscriptions, color: Colors.green, size: 20),
-          SizedBox(width: 8),
+          const Icon(Icons.subscriptions, color: Colors.green, size: 20),
+          const SizedBox(width: 8),
           Text(
             'Active',
             style: TextStyle(
@@ -506,15 +515,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                 return _buildCard(
                   gradient: LinearGradient(
-                    colors: [Colors.grey.shade800, Colors.grey.shade700],
+                    colors: [Colors.grey[800]!, Colors.grey[700]!],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   header: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
+                      const Icon(Icons.history, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
                       Text(
                         'Ended',
                         style: TextStyle(
@@ -564,27 +573,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }) {
     final isExpanded = _expandedCards[cardKey] ?? false;
     final effectiveTextColor =
-        gradient == null ? Colors.blue.shade900 : Colors.white;
+        gradient == null ? Colors.blue[900]! : Colors.white;
 
     return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      margin: EdgeInsets.symmetric(vertical: 12),
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         gradient: gradient,
         color: gradient == null ? Colors.white : null,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(26),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
-        ],
+        ], // 0.1 -> 26
       ),
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -593,7 +602,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       header,
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Text(
                         title,
                         style: TextStyle(
@@ -602,18 +611,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           color: effectiveTextColor,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         subtitle,
                         style: TextStyle(
                           fontSize: 14,
                           color:
                               gradient == null
-                                  ? Colors.grey.shade700
+                                  ? Colors.grey[700]
                                   : Colors.white70,
                         ),
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       ...details,
                     ],
                   ),
@@ -636,10 +645,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (isExpanded && expandableContent != null)
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.vertical(
+                color: Colors.blue[50],
+                borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(20),
                 ),
               ),
@@ -652,12 +661,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildDetailRow(IconData icon, String text, Color textColor) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 18, color: textColor),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
               text,
@@ -683,20 +692,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Colors.blue.shade900,
+            color: Colors.blue[900],
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Obx(
           () => Container(
-            margin: EdgeInsets.symmetric(vertical: 4),
-            padding: EdgeInsets.all(12),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
-                BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 6),
-              ],
+                BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
+              ], // 0.1 -> 26
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -707,18 +716,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     Text(
                       orderController.todayOrderStatus.value == 'No Order'
                           ? 'No order for today'
-                          : 'Today\'s Meal', // Placeholder; fetch mealType if needed
+                          : 'Today\'s Meal',
                       style: TextStyle(
-                        color: Colors.blue.shade900,
+                        color: Colors.blue[900],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     Text(
                       _formatDate(DateTime.now()),
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
                     ),
                   ],
                 ),
@@ -736,32 +742,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         Text(
           'Past Orders',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Colors.blue.shade900,
+            color: Colors.blue[900],
           ),
         ),
-        SizedBox(height: 8),
-        _buildOrderStream(userId, subscriptionId, [
+        const SizedBox(height: 8),
+        _buildOrderStream(userId, subscriptionId, const [
           'Delivered',
           'Cancelled',
           'Paused',
         ], true),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         Text(
           'Upcoming Orders',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Colors.blue.shade900,
+            color: Colors.blue[900],
           ),
         ),
-        SizedBox(height: 8),
-        _buildOrderStream(userId, subscriptionId, ['Pending Delivery'], false),
+        const SizedBox(height: 8),
+        _buildOrderStream(userId, subscriptionId, const [
+          'Pending Delivery',
+        ], false),
       ],
     );
   }
@@ -786,7 +794,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         if (snapshot.data!.docs.isEmpty) {
           return Text(
             isPast ? 'No past orders' : 'No upcoming orders',
-            style: TextStyle(color: Colors.grey.shade700),
+            style: TextStyle(color: Colors.grey[700]),
           );
         }
         return Column(
@@ -804,14 +812,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildOrderTile(Map<String, dynamic> order, String status) {
     final date = (order['date'] as Timestamp?)?.toDate();
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 4),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 6),
-        ],
+          BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
+        ], // 0.1 -> 26
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -822,13 +830,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Text(
                 order['mealType'] ?? 'Unknown Meal',
                 style: TextStyle(
-                  color: Colors.blue.shade900,
+                  color: Colors.blue[900],
                   fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
                 _formatDate(date ?? DateTime.now()),
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                style: TextStyle(color: Colors.grey[700], fontSize: 12),
               ),
             ],
           ),
@@ -847,19 +855,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildDataInputCard() {
     return Padding(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey.shade800,
+          color: Colors.grey[800],
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10),
-          ],
+            BoxShadow(color: Colors.black.withAlpha(51), blurRadius: 10),
+          ], // 0.2 -> 51
         ),
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Text(
+            const Text(
               'Let’s Get Started',
               style: TextStyle(
                 fontSize: 24,
@@ -867,7 +875,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 color: Colors.white,
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
@@ -877,11 +885,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                prefixIcon: Icon(Icons.person, color: Colors.grey.shade700),
+                prefixIcon: Icon(Icons.person, color: Colors.grey[700]),
               ),
-              style: TextStyle(color: Colors.black),
+              style: const TextStyle(color: Colors.black),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _phoneController,
               decoration: InputDecoration(
@@ -891,23 +899,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                prefixIcon: Icon(Icons.phone, color: Colors.grey.shade700),
+                prefixIcon: Icon(Icons.phone, color: Colors.grey[700]),
               ),
               keyboardType: TextInputType.phone,
-              style: TextStyle(color: Colors.black),
+              style: const TextStyle(color: Colors.black),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saveUserData,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade900,
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: Colors.blue[900],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 4,
               ),
-              child: Text(
+              child: const Text(
                 'Save',
                 style: TextStyle(
                   color: Colors.white,
@@ -924,12 +935,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildEmptyState(String message) {
     return Padding(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Center(
         child: Text(
           message,
           style: TextStyle(
-            color: Colors.grey.shade700,
+            color: Colors.grey[700],
             fontSize: 16,
             fontStyle: FontStyle.italic,
           ),
@@ -940,35 +951,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildError(String message) {
     return Padding(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Center(
-        child: Text(message, style: TextStyle(color: Colors.redAccent)),
+        child: Text(message, style: const TextStyle(color: Colors.redAccent)),
       ),
     );
   }
 
   Widget _buildLoading() {
     return Padding(
-      padding: EdgeInsets.all(16),
-      child: Center(
-        child: CircularProgressIndicator(color: Colors.blue.shade900),
-      ),
+      padding: const EdgeInsets.all(16),
+      child: Center(child: CircularProgressIndicator(color: Colors.blue[900])),
     );
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Pending Delivery':
-        return Colors.yellow[800]!;
-      case 'Delivered':
-        return Colors.green;
-      case 'Cancelled':
-      case 'Ended':
-        return Colors.red;
-      case 'Paused':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
+    return switch (status) {
+      'Pending Delivery' => Colors.yellow[800]!,
+      'Delivered' => Colors.green,
+      'Cancelled' => Colors.red,
+      'Ended' => Colors.red,
+      'Paused' => Colors.orange,
+      _ => Colors.grey,
+    };
   }
 }

@@ -14,18 +14,20 @@ import 'student_verification_survey.dart';
 import 'employee_login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
   @override
-  _ProfileScreenState createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
-  String activeAddress = 'Add Your Address and Set Active';
-  String userName = '';
-  String phoneNumber = '';
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  String _activeAddress = 'Add Your Address and Set Active';
+  String _userName = '';
+  String _phoneNumber = '';
   bool _isLoading = true;
   bool _isVerified = false;
   File? _profileImage;
@@ -38,29 +40,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
       try {
-        DocumentSnapshot doc =
-            await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-          final data = doc.data() as Map<String, dynamic>? ?? {};
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          final data = doc.data() ?? {};
           setState(() {
-            userName = data['name'] ?? 'User';
-            phoneNumber = data['phoneNumber'] ?? '';
-            nameController.text = userName;
-            phoneController.text = phoneNumber;
+            _userName = data['name'] ?? 'User';
+            _phoneNumber = data['phoneNumber'] ?? '';
+            _nameController.text = _userName;
+            _phoneController.text = _phoneNumber;
             _isVerified =
-                data.containsKey('studentDetails')
-                    ? (data['studentDetails']['isVerified'] ?? false)
-                    : false;
-            activeAddress = data['activeAddress'] ?? 'Manage your addresses';
+                data['studentDetails']?['isVerified'] as bool? ?? false;
+            _activeAddress = data['activeAddress'] ?? 'Manage your addresses';
           });
         }
       } catch (e) {
-        print('Error loading user data: $e');
+        debugPrint('Error loading user data: $e');
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -70,11 +69,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final imagePath = '${directory.path}/profile_image.jpg';
       final file = File(imagePath);
-      if (await file.exists()) {
+      if (await file.exists() && mounted) {
         setState(() => _profileImage = file);
       }
     } catch (e) {
-      print('Error loading local image: $e');
+      debugPrint('Error loading local image: $e');
     }
   }
 
@@ -82,7 +81,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final picker = ImagePicker();
     try {
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
+      if (pickedFile != null && mounted) {
         final directory = await getApplicationDocumentsDirectory();
         final imagePath = '${directory.path}/profile_image.jpg';
         final file = File(pickedFile.path);
@@ -90,77 +89,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() => _profileImage = File(imagePath));
       }
     } on PlatformException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick image: ${e.message}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: ${e.message}')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unexpected error: $e')));
-    }
-  }
-
-  Future<void> _launchWhatsApp() async {
-    const String phone = '+995500900095';
-    final Uri url = Uri.parse('https://wa.me/$phone');
-    try {
-      await launchUrl(url);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not launch WhatsApp: $e')));
-    }
-  }
-
-  Future<void> _launchEmail() async {
-    const String email = 'eazy.24@yandex.com';
-    final Uri url = Uri.parse('mailto:$email?subject=Feedback');
-    try {
-      await launchUrl(url);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not launch email: $e')));
-    }
-  }
-
-  void _navigateToMealPreferences() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-    );
-  }
-
-  Future<void> _showVerificationSurvey() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => StudentVerificationSurvey()),
-    );
-    if (result != null) {
-      User? user = _auth.currentUser;
-      if (user != null) {
-        try {
-          await _firestore.collection('users').doc(user.uid).update({
-            'studentDetails': result,
-          });
-          setState(() => _isVerified = result['isVerified'] ?? false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Student verification submitted!')),
-          );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to submit verification: $e')),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unexpected error: $e')));
       }
     }
   }
 
+  Future<void> _launchWhatsApp() async {
+    const phone = '+995500900095';
+    final url = Uri.parse('https://wa.me/$phone');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch WhatsApp')),
+      );
+    }
+  }
+
+  Future<void> _launchEmail() async {
+    const email = 'eazy.24@yandex.com';
+    final url = Uri.parse('mailto:$email?subject=Feedback');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not launch email')));
+    }
+  }
+
+  Future<void> _showVerificationSurvey() async {
+    // Store context in a local variable before async operations
+    final currentContext = context;
+
+    final result = await Navigator.push(
+      currentContext,
+      MaterialPageRoute(builder: (_) => StudentVerificationSurvey()),
+    );
+
+    // Early exit if result is null or widget is disposed
+    if (result == null || !mounted) return;
+
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await _firestore.collection('users').doc(user.uid).update({
+        'studentDetails': result,
+      });
+
+      // Check mounted before setState (State-specific check)
+      if (!mounted) return;
+      setState(() => _isVerified = result['isVerified'] ?? false);
+
+      // Use `context.mounted` (Flutter 3.13+) for ScaffoldMessenger
+      if (!currentContext.mounted) return;
+      ScaffoldMessenger.of(currentContext).showSnackBar(
+        const SnackBar(content: Text('Student verification submitted!')),
+      );
+    } catch (e) {
+      if (!currentContext.mounted) return;
+      ScaffoldMessenger.of(currentContext).showSnackBar(
+        SnackBar(content: Text('Failed to submit verification: $e')),
+      );
+    }
+  }
+
   Future<void> _logout() async {
-    showDialog(
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
+          (_) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -169,7 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'Confirm Logout',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade900,
+                color: Colors.blue[900],
               ),
             ),
             content: Text(
@@ -180,43 +189,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
               TextButton(
                 child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.blue.shade900),
+                  style: TextStyle(color: Colors.blue[900]),
                 ),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, false),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade900,
+                  backgroundColor: Colors.blue[900],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Text('Logout', style: TextStyle(color: Colors.white)),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  try {
-                    await _auth.signOut();
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => LoginScreen()),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to logout: $e')),
-                    );
-                  }
-                },
+                child: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onPressed: () => Navigator.pop(context, true),
               ),
             ],
           ),
     );
+
+    if (confirm == true && mounted) {
+      try {
+        await _auth.signOut();
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to logout: $e')));
+        }
+      }
+    }
   }
 
-  void _showEditProfileDialog() {
-    showDialog(
+  Future<void> _showEditProfileDialog() async {
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
+          (_) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -225,37 +243,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'Edit Profile',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade900,
+                color: Colors.blue[900],
               ),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: nameController,
+                  controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Name',
                     filled: true,
-                    fillColor: Colors.grey.shade100,
+                    fillColor: Colors.grey[100],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: Icon(Icons.person, color: Colors.blue.shade900),
+                    prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 TextField(
-                  controller: phoneController,
+                  controller: _phoneController,
                   decoration: InputDecoration(
                     labelText: 'Phone Number',
                     filled: true,
-                    fillColor: Colors.grey.shade100,
+                    fillColor: Colors.grey[100],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: Icon(Icons.phone, color: Colors.blue.shade900),
+                    prefixIcon: Icon(Icons.phone, color: Colors.blue[900]),
                   ),
                   keyboardType: TextInputType.phone,
                 ),
@@ -265,57 +283,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
               TextButton(
                 child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.blue.shade900),
+                  style: TextStyle(color: Colors.blue[900]),
                 ),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, false),
               ),
               ElevatedButton(
-                child: Text('Save', style: TextStyle(color: Colors.white)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade900,
+                  backgroundColor: Colors.blue[900],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () async {
-                  if (nameController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Name cannot be empty')),
-                    );
-                    return;
-                  }
-                  try {
-                    await _firestore
-                        .collection('users')
-                        .doc(_auth.currentUser!.uid)
-                        .update({
-                          'name': nameController.text.trim(),
-                          'phoneNumber': phoneController.text.trim(),
-                        });
-                    setState(() {
-                      userName = nameController.text.trim();
-                      phoneNumber = phoneController.text.trim();
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Profile updated successfully')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to update profile: $e')),
-                    );
-                  }
-                },
+                child: const Text(
+                  'Save',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onPressed: () => Navigator.pop(context, true),
               ),
             ],
           ),
     );
+
+    if (confirm == true && mounted) {
+      if (_nameController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Name cannot be empty')));
+        return;
+      }
+      try {
+        await _firestore
+            .collection('users')
+            .doc(_auth.currentUser!.uid)
+            .update({
+              'name': _nameController.text.trim(),
+              'phoneNumber': _phoneController.text.trim(),
+            });
+        if (mounted) {
+          setState(() {
+            _userName = _nameController.text.trim();
+            _phoneNumber = _phoneController.text.trim();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update profile: $e')),
+          );
+        }
+      }
+    }
   }
 
-  void _navigateToEmployeeLogin() {
+  void _navigateToMealPreferences(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => EmployeeLoginScreen()),
+      MaterialPageRoute(builder: (_) => SubscriptionScreen()),
+    );
+  }
+
+  void _navigateToEmployeeLogin(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EmployeeLoginScreen()),
     );
   }
 
@@ -326,25 +359,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body:
           _isLoading
               ? Center(
-                child: CircularProgressIndicator(color: Colors.blue.shade900),
+                child: CircularProgressIndicator(color: Colors.blue[900]),
               )
               : Stack(
                 children: [
-                  // Background gradient
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.blue.shade900.withOpacity(0.05),
+                          Colors.blue[900]!.withAlpha(13),
                           backgroundColor,
-                        ],
+                        ], // 0.05 -> 13
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
                     ),
                   ),
                   CustomScrollView(
-                    physics: BouncingScrollPhysics(),
+                    physics: const BouncingScrollPhysics(),
                     slivers: [
                       SliverAppBar(
                         expandedHeight: 280,
@@ -356,14 +388,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           background: Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [
-                                  Colors.blue.shade900,
-                                  Colors.blue.shade700,
-                                ],
+                                colors: [Colors.blue[900]!, Colors.blue[700]!],
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                               ),
-                              borderRadius: BorderRadius.vertical(
+                              borderRadius: const BorderRadius.vertical(
                                 bottom: Radius.circular(30),
                               ),
                             ),
@@ -373,7 +402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 GestureDetector(
                                   onTap: _pickProfileImage,
                                   child: AnimatedContainer(
-                                    duration: Duration(milliseconds: 300),
+                                    duration: const Duration(milliseconds: 300),
                                     curve: Curves.easeInOut,
                                     width: 120,
                                     height: 120,
@@ -385,16 +414,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.2),
+                                          color: Colors.black.withAlpha(51),
                                           blurRadius: 10,
-                                          offset: Offset(0, 4),
+                                          offset: const Offset(0, 4),
                                         ),
-                                      ],
+                                      ], // 0.2 -> 51
                                       image: DecorationImage(
                                         image:
                                             _profileImage != null
                                                 ? FileImage(_profileImage!)
-                                                : AssetImage(
+                                                : const AssetImage(
                                                       'assets/profile_pic.jpg',
                                                     )
                                                     as ImageProvider,
@@ -404,17 +433,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: Align(
                                       alignment: Alignment.bottomRight,
                                       child: Container(
-                                        padding: EdgeInsets.all(6),
-                                        margin: EdgeInsets.all(4),
+                                        padding: const EdgeInsets.all(6),
+                                        margin: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.shade900,
+                                          color: Colors.blue[900],
                                           shape: BoxShape.circle,
                                           border: Border.all(
                                             color: Colors.white,
                                             width: 1,
                                           ),
                                         ),
-                                        child: Icon(
+                                        child: const Icon(
                                           Icons.camera_alt,
                                           color: Colors.white,
                                           size: 18,
@@ -423,10 +452,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                   ),
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
-                                  userName,
-                                  style: TextStyle(
+                                  _userName,
+                                  style: const TextStyle(
                                     fontSize: 28,
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
@@ -437,9 +466,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   _auth.currentUser?.email ?? '',
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.white70,
+                                    color: Colors.white.withAlpha(179),
                                     fontStyle: FontStyle.italic,
-                                  ),
+                                  ), // 0.7 -> 179
                                 ),
                               ],
                             ),
@@ -448,7 +477,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(
+                          padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 24,
                           ),
@@ -463,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: headTextColor,
                                 ),
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               ProfileCard(
                                 icon: Icons.person,
                                 title: 'Edit Profile',
@@ -474,19 +503,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 icon: Icons.restaurant_menu,
                                 title: 'Meal Plan',
                                 subtitle: 'Premium Weekly Subscription',
-                                onTap: _navigateToMealPreferences,
+                                onTap:
+                                    () => _navigateToMealPreferences(
+                                      context,
+                                    ), // Line 143 fixed
                               ),
                               ProfileCard(
                                 icon: Icons.location_on,
                                 title: 'Address',
-                                subtitle: activeAddress,
+                                subtitle: _activeAddress,
                                 onTap:
                                     () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder:
-                                            (context) =>
-                                                AddressManagementScreen(),
+                                            (_) =>
+                                                const AddressManagementScreen(),
                                       ),
                                     ).then((_) => _loadUserData()),
                               ),
@@ -506,13 +538,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         : _showVerificationSurvey,
                                 trailing:
                                     _isVerified
-                                        ? Icon(
+                                        ? const Icon(
                                           Icons.check_circle,
                                           color: Colors.green,
                                         )
                                         : null,
                               ),
-                              SizedBox(height: 24),
+                              const SizedBox(height: 24),
                               Text(
                                 'Support & More',
                                 style: TextStyle(
@@ -521,7 +553,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: headTextColor,
                                 ),
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               ProfileCard(
                                 icon: Icons.support_agent,
                                 title: 'Support',
@@ -538,7 +570,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 icon: Icons.admin_panel_settings,
                                 title: 'Employee Login',
                                 subtitle: 'Access admin features',
-                                onTap: _navigateToEmployeeLogin,
+                                onTap:
+                                    () => _navigateToEmployeeLogin(
+                                      context,
+                                    ), // Line 147 fixed
                               ),
                               ProfileCard(
                                 icon: Icons.logout,
@@ -568,6 +603,7 @@ class ProfileCard extends StatelessWidget {
   final Widget? trailing;
 
   const ProfileCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -579,25 +615,25 @@ class ProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      margin: EdgeInsets.only(bottom: 12),
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors:
               onTap != null
-                  ? [Colors.blue.shade900, Colors.blue.shade700]
-                  : [Colors.grey.shade700, Colors.grey.shade600],
+                  ? [Colors.blue[900]!, Colors.blue[700]!]
+                  : [Colors.grey[700]!, Colors.grey[600]!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(26),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
-        ],
+        ], // 0.1 -> 26
       ),
       child: Material(
         color: Colors.transparent,
@@ -606,34 +642,37 @@ class ProfileCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Container(
-                  padding: EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withAlpha(26),
                     borderRadius: BorderRadius.circular(12),
-                  ),
+                  ), // 0.1 -> 26
                   child: Icon(icon, color: color ?? Colors.white, size: 28),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: TextStyle(fontSize: 14, color: Colors.white70),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withAlpha(179),
+                        ), // 0.7 -> 179
                       ),
                     ],
                   ),
@@ -642,10 +681,10 @@ class ProfileCard extends StatelessWidget {
                     (onTap != null
                         ? Icon(
                           Icons.arrow_forward_ios,
-                          color: Colors.white70,
+                          color: Colors.white.withAlpha(179),
                           size: 16,
                         )
-                        : SizedBox()),
+                        : const SizedBox()),
               ],
             ),
           ),

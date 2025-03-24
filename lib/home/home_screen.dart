@@ -7,22 +7,23 @@ import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:path_provider/path_provider.dart';
-import '../controllers/banner_controller.dart';
 import '../controllers/order_status_controller.dart';
+import '../controllers/pause_play_controller.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final BannerController bannerController = Get.put(BannerController());
   final OrderController orderController = Get.find<OrderController>();
+  final PausePlayController pausePlayController =
+      Get.find<PausePlayController>();
   final TextEditingController _searchController = TextEditingController();
-  RxBool isSwitched = false.obs;
-  RxBool isChecked = false.obs;
   String userName = 'User';
   File? _profileImage;
   String greeting = 'Good Morning';
@@ -32,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? subscriptionEndDate;
   bool isStudentVerified = false;
   String? activeAddress;
-  DateTime? _pauseStartTime;
   StreamSubscription<QuerySnapshot>? _orderSubscription;
   Timer? _dailyRefreshTimer;
 
@@ -43,32 +43,34 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadProfileImage();
     _setGreeting();
     _searchController.addListener(_filterItems);
-    _startOrderListener(); // Immediate check on app open
-    _scheduleDailyOrderCheck(); // Schedule daily refresh
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startOrderListener();
+      _scheduleDailyOrderCheck();
+    });
   }
 
   void _scheduleDailyOrderCheck() {
     final now = DateTime.now();
     var next9AM = DateTime(now.year, now.month, now.day, 9, 0);
     if (now.isAfter(next9AM)) {
-      next9AM = next9AM.add(Duration(days: 1)); // Move to tomorrow if past 9 AM
+      next9AM = next9AM.add(const Duration(days: 1));
     }
     final durationUntil9AM = next9AM.difference(now);
 
-    _dailyRefreshTimer?.cancel(); // Cancel any existing timer
+    _dailyRefreshTimer?.cancel();
     _dailyRefreshTimer = Timer(durationUntil9AM, () {
       _startOrderListener();
-      _dailyRefreshTimer = Timer.periodic(Duration(days: 1), (_) {
+      _dailyRefreshTimer = Timer.periodic(const Duration(days: 1), (_) {
         _startOrderListener();
       });
     });
   }
 
   void _startOrderListener() {
-    _orderSubscription?.cancel(); // Cancel any existing listener
-    User? user = _auth.currentUser;
+    _orderSubscription?.cancel();
+    final user = _auth.currentUser;
     if (user != null) {
-      DateTime now = DateTime.now();
+      final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
       final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
@@ -78,30 +80,34 @@ class _HomeScreenState extends State<HomeScreen> {
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
           .snapshots()
-          .listen((snapshot) {
-            if (snapshot.docs.isNotEmpty) {
-              final order = snapshot.docs.first.data() as Map<String, dynamic>;
-              final status = order['status'] ?? 'Pending Delivery';
-              orderController.updateOrderStatus(status);
-              if (status == 'Delivered') {
-                _orderSubscription?.cancel();
-                _orderSubscription = null; // Stop listening until next 9 AM
+          .listen(
+            (snapshot) {
+              if (snapshot.docs.isNotEmpty && mounted) {
+                final order = snapshot.docs.first.data();
+                final status = order['status'] ?? 'Pending Delivery';
+                orderController.updateOrderStatus(status);
+                if (status == 'Delivered') {
+                  _orderSubscription?.cancel();
+                  _orderSubscription = null;
+                }
+              } else if (mounted) {
+                orderController.updateOrderStatus('No Order');
               }
-            } else {
-              orderController.updateOrderStatus('No Order');
-            }
-          });
+            },
+            onError: (e) {
+              print('Order listener error: $e'); // Debug log
+            },
+          );
     }
   }
 
   Future<void> _loadUserData() async {
-    User? user = _auth.currentUser;
+    final user = _auth.currentUser;
     if (user != null) {
       try {
-        DocumentSnapshot doc =
-            await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-          final data = doc.data() as Map<String, dynamic>? ?? {};
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          final data = doc.data() ?? {};
           setState(() {
             userName = data['name'] ?? 'User';
             isSubscribed = data['activeSubscription'] ?? false;
@@ -111,19 +117,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     : false;
             activeAddress =
                 data['activeAddress'] != null
-                    ? LocationDetails.fromMap(data['activeAddress']).toString()
-                    : null;
-            isSwitched.value = data['isPaused'] ?? false;
-            _pauseStartTime =
-                data['pausedAt'] != null
-                    ? (data['pausedAt'] as Timestamp).toDate()
+                    ? (data['activeAddress'] is String
+                        ? data['activeAddress'] as String
+                        : LocationDetails.fromMap(
+                          data['activeAddress'] as Map<String, dynamic>,
+                        ).toString())
                     : null;
             if (isSubscribed && data['subscriptionPlan'] != null) {
-              String plan = data['subscriptionPlan'];
-              Timestamp? createdAt = data['createdAt'];
+              final plan = data['subscriptionPlan'] as String;
+              final createdAt = data['createdAt'] as Timestamp?;
               if (createdAt != null) {
-                DateTime startDate = createdAt.toDate();
-                int days =
+                final startDate = createdAt.toDate();
+                final days =
                     plan == '1 Week'
                         ? 7
                         : plan == '3 Weeks'
@@ -135,10 +140,10 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       } catch (e) {
-        print('Error loading user data: $e');
+        print('Error loading user data: $e'); // Debug log
       }
+      _initializeItems();
     }
-    _initializeItems();
   }
 
   Future<void> _loadProfileImage() async {
@@ -146,149 +151,28 @@ class _HomeScreenState extends State<HomeScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final imagePath = '${directory.path}/profile_image.jpg';
       final file = File(imagePath);
-      if (await file.exists()) setState(() => _profileImage = file);
+      if (await file.exists() && mounted) {
+        setState(() => _profileImage = file);
+      }
     } catch (e) {
-      print('Error loading profile image: $e');
+      print('Error loading profile image: $e'); // Debug log
     }
   }
 
   void _setGreeting() {
     final now = DateTime.now();
     final hour = now.hour;
-    setState(() {
-      greeting =
-          hour >= 5 && hour < 12
-              ? 'Good Morning'
-              : hour >= 12 && hour < 17
-              ? 'Good Afternoon'
-              : hour >= 17 && hour < 20
-              ? 'Good Evening'
-              : 'Good Night';
-    });
-  }
-
-  bool _canPauseOrPlay() {
-    final now = DateTime.now();
-    return isSubscribed && (now.hour >= 9 && now.hour < 22);
-  }
-
-  Future<void> _togglePausePlay() async {
-    User? user = _auth.currentUser;
-    if (user == null || !isSubscribed || subscriptionEndDate == null) return;
-    bool newIsPaused = !isSwitched.value;
-    if (_canPauseOrPlay()) {
+    if (mounted) {
       setState(() {
-        if (isSwitched.value && _pauseStartTime != null) {
-          final pausedDuration =
-              DateTime.now().difference(_pauseStartTime!).inSeconds;
-          subscriptionEndDate = subscriptionEndDate!.add(
-            Duration(seconds: pausedDuration),
-          );
-          _pauseStartTime = null;
-          isSwitched.value = false;
-        } else {
-          _pauseStartTime = DateTime.now();
-          isSwitched.value = true;
-        }
+        greeting =
+            hour >= 5 && hour < 12
+                ? 'Good Morning'
+                : hour >= 12 && hour < 17
+                ? 'Good Afternoon'
+                : hour >= 17 && hour < 20
+                ? 'Good Evening'
+                : 'Good Night';
       });
-      try {
-        await _firestore.collection('users').doc(user.uid).update({
-          'isPaused': newIsPaused,
-          'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
-          'subscriptionEndDate': Timestamp.fromDate(subscriptionEndDate!),
-        });
-        newIsPaused
-            ? await _markNextDayPaused(user.uid)
-            : await _resumeNextDay(user.uid);
-      } catch (e) {
-        print('Error in togglePausePlay: $e');
-        setState(() => isSwitched.value = !newIsPaused);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update subscription status')),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You can only pause or play between 9 AM - 10 PM'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _markNextDayPaused(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-    QuerySnapshot orders =
-        await _firestore
-            .collection('orders')
-            .where('userId', isEqualTo: userId)
-            .where('status', isEqualTo: 'Pending Delivery')
-            .where(
-              'date',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-            )
-            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
-            .get();
-    for (var order in orders.docs) {
-      await order.reference.update({'status': 'Paused'});
-    }
-  }
-
-  Future<void> _resumeNextDay(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-    QuerySnapshot orders =
-        await _firestore
-            .collection('orders')
-            .where('userId', isEqualTo: userId)
-            .where('status', isEqualTo: 'Paused')
-            .where(
-              'date',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-            )
-            .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
-            .get();
-    for (var order in orders.docs) {
-      await order.reference.update({'status': 'Pending Delivery'});
     }
   }
 
@@ -301,8 +185,12 @@ class _HomeScreenState extends State<HomeScreen> {
         'icon': Iconsax.play,
         'extraWidget': Obx(
           () => Switch(
-            value: isSwitched.value,
-            onChanged: isSubscribed ? (value) => _togglePausePlay() : null,
+            value: pausePlayController.isPaused.value,
+            onChanged:
+                isSubscribed
+                    ? (value) =>
+                        pausePlayController.togglePausePlay(isSubscribed)
+                    : null,
             activeColor: Colors.blue[600],
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.blue[200],
@@ -317,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? orderController.todayOrderStatus.value
                 : 'Subscribe to see today\'s order',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withAlpha(204),
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -326,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         'description': 'View the status of your current day\'s order.',
-        'icon': Iconsax.truck_fast,
+        'icon': Icons.delivery_dining,
         'extraWidget': Obx(
           () => Icon(
             orderController.todayOrderStatus.value == 'Delivered'
@@ -351,13 +239,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 : 'Subscribe to a plan',
         'description': 'Monitor your subscription duration and details.',
         'icon': Iconsax.calendar,
-        'extraWidget': Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              width: 50,
-              height: 50,
-              child: CircularProgressIndicator(
+        'extraWidget': SizedBox(
+          width: 50,
+          height: 50,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
                 value:
                     isSubscribed && subscriptionEndDate != null
                         ? (subscriptionEndDate!
@@ -366,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 (subscriptionEndDate!
                                     .difference(
                                       subscriptionEndDate!.subtract(
-                                        Duration(days: 28),
+                                        const Duration(days: 28),
                                       ),
                                     )
                                     .inDays
@@ -374,21 +262,23 @@ class _HomeScreenState extends State<HomeScreen> {
                             .clamp(0.0, 1.0)
                         : 0.0,
                 strokeWidth: 5,
-                backgroundColor: Colors.white.withOpacity(0.2),
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                backgroundColor: Colors.white.withAlpha(51),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
               ),
-            ),
-            Text(
-              isSubscribed && subscriptionEndDate != null
-                  ? '${((subscriptionEndDate!.difference(DateTime.now()).inDays / (subscriptionEndDate!.difference(subscriptionEndDate!.subtract(Duration(days: 28))).inDays.abs())) * 100).round()}%'
-                  : '0%',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+              FittedBox(
+                child: Text(
+                  isSubscribed && subscriptionEndDate != null
+                      ? '${((subscriptionEndDate!.difference(DateTime.now()).inDays / (subscriptionEndDate!.difference(subscriptionEndDate!.subtract(const Duration(days: 28))).inDays.abs())) * 100).round()}%'
+                      : '0%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       },
       {
@@ -398,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? 'Verified (10% off)'
                 : 'Verify for 10% discount',
         'description': 'Verify your student status for a 10% discount.',
-        'icon': Iconsax.user_edit,
+        'icon': Icons.school,
       },
       {
         'title': 'Active Address',
@@ -417,13 +307,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _filterItems() {
-    String query = _searchController.text.toLowerCase();
-    setState(() {
-      filteredItems =
-          allItems
-              .where((item) => item['title'].toLowerCase().contains(query))
-              .toList();
-    });
+    final query = _searchController.text.toLowerCase();
+    if (mounted) {
+      setState(() {
+        filteredItems =
+            allItems
+                .where(
+                  (item) =>
+                      (item['title'] as String).toLowerCase().contains(query),
+                )
+                .toList();
+      });
+    }
   }
 
   @override
@@ -446,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.white,
               pinned: true,
               elevation: 0,
-              expandedHeight: 140,
+              expandedHeight: MediaQuery.of(context).size.height * 0.22,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
                   decoration: BoxDecoration(
@@ -460,64 +355,76 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'Hi, $userName!',
-                                  style: TextStyle(
-                                    color: Colors.blue[900],
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
+                        Flexible(
+                          flex: 2,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Hi, $userName!',
+                                      style: TextStyle(
+                                        color: Colors.blue[900],
+                                        fontSize:
+                                            MediaQuery.of(context).size.width *
+                                            0.07,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  Iconsax.profile_tick,
-                                  color: Colors.blue[700],
-                                  size: 24,
-                                ),
-                              ],
-                            ),
-                            Text(
-                              greeting,
-                              style: TextStyle(
-                                color: Colors.blue[600],
-                                fontSize: 16,
+                                  const SizedBox(width: 8),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.blue[200]!,
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.withOpacity(0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                              const SizedBox(height: 4),
+                              Text(
+                                greeting,
+                                style: TextStyle(
+                                  color: Colors.blue[600],
+                                  fontSize:
+                                      MediaQuery.of(context).size.width * 0.04,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                             ],
                           ),
-                          child: CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Colors.white,
-                            backgroundImage:
-                                _profileImage != null
-                                    ? FileImage(_profileImage!)
-                                    : const AssetImage('assets/profile_pic.jpg')
-                                        as ImageProvider,
+                        ),
+                        Flexible(
+                          flex: 1,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.blue[200]!,
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.withAlpha(26),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.white,
+                              backgroundImage:
+                                  _profileImage != null
+                                      ? FileImage(_profileImage!)
+                                      : const AssetImage(
+                                            'assets/profile_pic.jpg',
+                                          )
+                                          as ImageProvider,
+                            ),
                           ),
                         ),
                       ],
@@ -529,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Home',
                 style: TextStyle(
                   color: Colors.blue[900],
-                  fontSize: 20,
+                  fontSize: MediaQuery.of(context).size.width * 0.05,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -617,51 +524,62 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.2),
+                                        color: Colors.white.withAlpha(51),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Icon(
-                                        item['icon'],
+                                        item['icon'] as IconData,
                                         color: Colors.white,
                                         size: 24,
                                       ),
                                     ),
                                   if (item['extraWidget'] != null)
-                                    item['extraWidget'],
+                                    Flexible(
+                                      child: item['extraWidget'] as Widget,
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              Text(
-                                item['title']!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
+                              Flexible(
+                                child: Text(
+                                  item['title'] as String,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 8),
-                              item['subtitle'] is Widget
-                                  ? item['subtitle']
-                                  : Text(
-                                    index == 0
-                                        ? (isSubscribed
-                                            ? (!_canPauseOrPlay()
-                                                ? 'Switch unavailable now'
-                                                : (isSwitched.value
-                                                    ? 'Paused'
-                                                    : 'Active'))
-                                            : 'Not subscribed')
-                                        : item['subtitle']!,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              Flexible(
+                                child:
+                                    item['subtitle'] is Widget
+                                        ? item['subtitle'] as Widget
+                                        : Text(
+                                          index == 0
+                                              ? (isSubscribed
+                                                  ? (DateTime.now().hour >= 9 &&
+                                                          DateTime.now().hour <
+                                                              22
+                                                      ? (pausePlayController
+                                                              .isPaused
+                                                              .value
+                                                          ? 'Paused'
+                                                          : 'Active')
+                                                      : 'Switch unavailable now')
+                                                  : 'Not subscribed')
+                                              : item['subtitle'] as String,
+                                          style: TextStyle(
+                                            color: Colors.white.withAlpha(204),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                              ),
                             ],
                           ),
                         ),
@@ -686,15 +604,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              item['description']!,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w400,
+                            Flexible(
+                              child: Text(
+                                item['description'] as String,
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha(230),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                                maxLines: 5,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 5,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -713,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class LocationDetails {
   final String address;
-  LocationDetails(this.address);
+  const LocationDetails(this.address);
   factory LocationDetails.fromMap(Map<String, dynamic> map) =>
       LocationDetails(map['address'] ?? '');
   @override

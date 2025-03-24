@@ -1,10 +1,10 @@
+import 'package:eazy_meals/screens/verification_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
-import 'VerificationScreen.dart';
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
