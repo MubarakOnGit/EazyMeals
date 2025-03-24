@@ -199,29 +199,42 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: Colors.grey[850],
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(20),
             ),
+            backgroundColor: Colors.white,
             title: Text(
               'Add New Address',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.blue.shade900,
+              ),
             ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildTextField(_addressController, 'Address'),
-                  _buildTextField(streetController, 'Street'),
-                  _buildTextField(cityController, 'City'),
-                  _buildTextField(
+                  _buildDialogTextField(
+                    _addressController,
+                    'Address',
+                    'Full address description',
+                  ),
+                  _buildDialogTextField(
+                    streetController,
+                    'Street',
+                    'Street name',
+                  ),
+                  _buildDialogTextField(cityController, 'City', 'City name'),
+                  _buildDialogTextField(
                     latController,
                     'Latitude',
+                    'e.g., 11.201561',
                     keyboardType: TextInputType.number,
                   ),
-                  _buildTextField(
+                  _buildDialogTextField(
                     lngController,
                     'Longitude',
+                    'e.g., 76.336183',
                     keyboardType: TextInputType.number,
                   ),
                 ],
@@ -229,11 +242,11 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
                 child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.grey[400]),
+                  style: TextStyle(color: Colors.blue.shade900),
                 ),
+                onPressed: () => Navigator.pop(context),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -293,13 +306,16 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: Colors.grey[850],
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(20),
             ),
+            backgroundColor: Colors.white,
             title: Text(
               'Add from Google Maps',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.blue.shade900,
+              ),
             ),
             content: SingleChildScrollView(
               child: Column(
@@ -307,26 +323,31 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
+                    'Follow these steps:',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
                     '1. Open Google Maps',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
                   Text(
                     '2. Pin your location',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
                   Text(
                     '3. Copy coordinates (e.g., 11.201561, 76.336183)',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
                   Text(
                     '4. Paste below',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
-                  SizedBox(height: 10),
-                  _buildTextField(
+                  SizedBox(height: 16),
+                  _buildDialogTextField(
                     coordsController,
                     'Coordinates (lat,lng)',
-                    hint: 'e.g., 11.201561, 76.336183',
+                    'e.g., 11.201561, 76.336183',
                   ),
                 ],
               ),
@@ -339,15 +360,15 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                     ),
                 child: Text(
                   'Open Maps',
-                  style: TextStyle(color: Colors.blue.shade600),
+                  style: TextStyle(color: Colors.blue.shade900),
                 ),
               ),
               TextButton(
-                onPressed: () => Navigator.pop(context),
                 child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.grey[400]),
+                  style: TextStyle(color: Colors.blue.shade900),
                 ),
+                onPressed: () => Navigator.pop(context),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -422,28 +443,30 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _buildTextField(
+  Widget _buildDialogTextField(
     TextEditingController controller,
-    String label, {
-    String? hint,
+    String label,
+    String hint, {
     TextInputType? keyboardType,
   }) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          labelStyle: TextStyle(color: Colors.grey[400]),
-          hintStyle: TextStyle(color: Colors.grey[600]),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          focusedBorder: OutlineInputBorder(
+          labelStyle: TextStyle(color: Colors.grey.shade700),
+          hintStyle: TextStyle(color: Colors.grey.shade500),
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue.shade600),
+            borderSide: BorderSide.none,
           ),
+          contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         ),
-        style: TextStyle(color: Colors.white),
+        style: TextStyle(color: Colors.blue.shade900),
         keyboardType: keyboardType ?? TextInputType.text,
       ),
     );
@@ -452,180 +475,319 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900],
-      appBar: AppBar(
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context); // Navigate back if possible
-            } else {}
-          },
-        ),
-        title: Text(
-          'Manage Addresses',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
+      backgroundColor: Colors.grey.shade100,
+      body: Stack(
+        children: [
+          // Background gradient for subtle depth
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.blue.shade900.withOpacity(0.05),
+                  Colors.grey.shade100,
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+          RefreshIndicator(
+            onRefresh: _loadAddresses,
+            color: Colors.blue.shade900,
+            child: CustomScrollView(
+              physics: BouncingScrollPhysics(),
+              slivers: [
+                _buildSliverAppBar(),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildAddAddressSection(),
+                        SizedBox(height: 24),
+                        Text(
+                          'Your Addresses',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                _isLoading
+                    ? SliverToBoxAdapter(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    )
+                    : _addresses.isEmpty
+                    ? SliverToBoxAdapter(child: _buildEmptyState())
+                    : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            _buildAddressCard(_addresses[index], index),
+                        childCount: _addresses.length,
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // SliverAppBar with gradient and modern styling
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 180,
+      floating: false,
+      pinned: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade900, Colors.blue.shade700],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Manage Addresses',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Set your delivery locations',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadAddresses,
-        color: Colors.blue.shade600,
-        child:
-            _isLoading
-                ? Center(
-                  child: CircularProgressIndicator(color: Colors.blue.shade900),
-                )
-                : CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildTextField(
-                                    _addressController,
-                                    'Add New Address',
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: _addAddress,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue.shade900,
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: Icon(Icons.add, color: Colors.white),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _addAddressFromGoogleMaps,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade900,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.map, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Add from Google Maps',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+    );
+  }
+
+  // Add address section with buttons
+  Widget _buildAddAddressSection() {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Add New Address',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue.shade900,
+            ),
+          ),
+          SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _addAddress,
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.blue.shade900,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 8,
+                    shadowColor: Colors.blue.withOpacity(0.3),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_location, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Manual Entry',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
                         ),
                       ),
-                    ),
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final address = _addresses[index];
-                        final isActive = _activeAddress == address;
-                        return Card(
-                          elevation: 4,
-                          margin: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          color: Colors.grey[850],
-                          child: ListTile(
-                            contentPadding: EdgeInsets.all(16),
-                            title: Text(
-                              address.toString(),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            subtitle: Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: Text(
-                                'Street: ${address.street}\nCity: ${address.city}\nLat: ${address.latitude}, Lng: ${address.longitude}',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete,
-                                    color: Colors.red.shade400,
-                                  ),
-                                  onPressed: () => _deleteAddress(index),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    isActive
-                                        ? Icons.check_circle
-                                        : Icons.radio_button_unchecked,
-                                    color:
-                                        isActive
-                                            ? Colors.green.shade400
-                                            : Colors.grey[600],
-                                  ),
-                                  onPressed: () => _setActiveAddress(address),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }, childCount: _addresses.length),
-                    ),
-                    if (_addresses.isEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(
-                            child: Text(
-                              'No addresses added yet',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _addAddressFromGoogleMaps,
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.blue.shade900,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 8,
+                    shadowColor: Colors.blue.withOpacity(0.3),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.map, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'From Google Maps',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Address card with actions
+  Widget _buildAddressCard(LocationDetails address, int index) {
+    final isActive = _activeAddress == address;
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors:
+              isActive
+                  ? [Colors.blue.shade900, Colors.blue.shade700]
+                  : [Colors.white, Colors.grey.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color:
+                  isActive
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.blue.shade900.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.location_on,
+              color: isActive ? Colors.white : Colors.blue.shade900,
+              size: 20,
+            ),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  address.address,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? Colors.white : Colors.blue.shade900,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Street: ${address.street}\nCity: ${address.city}\nLat: ${address.latitude}, Lng: ${address.longitude}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isActive ? Colors.white70 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.delete,
+                  color: isActive ? Colors.redAccent : Colors.red.shade400,
+                ),
+                onPressed: () => _deleteAddress(index),
+              ),
+              IconButton(
+                icon: Icon(
+                  isActive ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: isActive ? Colors.greenAccent : Colors.grey.shade600,
+                ),
+                onPressed: () => _setActiveAddress(address),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Empty state widget
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.location_off, size: 60, color: Colors.grey.shade400),
+          SizedBox(height: 16),
+          Text(
+            'No addresses added yet',
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Add one to get started!',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+          ),
+        ],
       ),
     );
   }

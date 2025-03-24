@@ -11,7 +11,7 @@ import '../screens/login_screen.dart';
 import '../screens/subscription_screen.dart';
 import 'address_management_screen.dart';
 import 'student_verification_survey.dart';
-import 'employee_login_screen.dart'; // Import EmployeeLoginScreen
+import 'employee_login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -50,7 +50,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             phoneNumber = data['phoneNumber'] ?? '';
             nameController.text = userName;
             phoneController.text = phoneNumber;
-            // Safely handle studentDetails
             _isVerified =
                 data.containsKey('studentDetails')
                     ? (data['studentDetails']['isVerified'] ?? false)
@@ -59,7 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           });
         }
       } catch (e) {
-        print('Error loading user data: $e'); // Log silently, no SnackBar
+        print('Error loading user data: $e');
       } finally {
         setState(() => _isLoading = false);
       }
@@ -102,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _launchWhatsApp() async {
-    const String phone = '+995500900095'; // Replace with your WhatsApp number
+    const String phone = '+995500900095';
     final Uri url = Uri.parse('https://wa.me/$phone');
     try {
       await launchUrl(url);
@@ -114,8 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _launchEmail() async {
-    const String email =
-        'eazy.24@yandex.com'; // Replace with your support email
+    const String email = 'eazy.24@yandex.com';
     final Uri url = Uri.parse('mailto:$email?subject=Feedback');
     try {
       await launchUrl(url);
@@ -164,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder:
           (context) => AlertDialog(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(20),
             ),
             backgroundColor: Colors.white,
             title: Text(
@@ -195,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Text('Logout', style: TextStyle(color: Colors.white)),
                 onPressed: () async {
-                  Navigator.pop(context); // Close the dialog
+                  Navigator.pop(context);
                   try {
                     await _auth.signOut();
                     Navigator.pushReplacement(
@@ -219,7 +217,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('Edit Profile'),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            title: Text(
+              'Edit Profile',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade900,
+              ),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -227,9 +235,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   controller: nameController,
                   decoration: InputDecoration(
                     labelText: 'Name',
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
+                    prefixIcon: Icon(Icons.person, color: Colors.blue.shade900),
                   ),
                 ),
                 SizedBox(height: 16),
@@ -237,9 +249,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   controller: phoneController,
                   decoration: InputDecoration(
                     labelText: 'Phone Number',
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
+                    prefixIcon: Icon(Icons.phone, color: Colors.blue.shade900),
                   ),
                   keyboardType: TextInputType.phone,
                 ),
@@ -247,11 +263,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             actions: [
               TextButton(
-                child: Text('Cancel'),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.blue.shade900),
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
               ElevatedButton(
-                child: Text('Save'),
+                child: Text('Save', style: TextStyle(color: Colors.white)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade900,
                   shape: RoundedRectangleBorder(
@@ -306,156 +325,233 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: backgroundColor,
       body:
           _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : CustomScrollView(
-                slivers: [
-                  SliverAppBar(
-                    leading: null,
-                    expandedHeight: 250,
-                    floating: false,
-                    pinned: true,
-                    flexibleSpace: FlexibleSpaceBar(
-                      background: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.blue.shade900,
-                              Colors.blue.shade600,
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            GestureDetector(
-                              onTap: _pickProfileImage,
-                              child: CircleAvatar(
-                                radius: 60,
-                                backgroundImage:
-                                    _profileImage != null
-                                        ? FileImage(_profileImage!)
-                                        : AssetImage('assets/profile_pic.jpg')
-                                            as ImageProvider,
-                                child: Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Container(
-                                    padding: EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade900,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.camera_alt,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              userName,
-                              style: TextStyle(
-                                fontSize: 28,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black45,
-                                    blurRadius: 4,
-                                    offset: Offset(2, 2),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              _auth.currentUser?.email ?? '',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
+              ? Center(
+                child: CircularProgressIndicator(color: Colors.blue.shade900),
+              )
+              : Stack(
+                children: [
+                  // Background gradient
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.blue.shade900.withOpacity(0.05),
+                          backgroundColor,
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
                     ),
                   ),
-                  SliverList(
-                    delegate: SliverChildListDelegate([
-                      Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            ProfileSectionCard(
-                              icon: Icons.person,
-                              title: 'Edit Profile',
-                              subtitle: 'Update your name and phone number',
-                              onTap: _showEditProfileDialog,
+                  CustomScrollView(
+                    physics: BouncingScrollPhysics(),
+                    slivers: [
+                      SliverAppBar(
+                        expandedHeight: 280,
+                        floating: false,
+                        pinned: true,
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
+                        flexibleSpace: FlexibleSpaceBar(
+                          background: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade900,
+                                  Colors.blue.shade700,
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.vertical(
+                                bottom: Radius.circular(30),
+                              ),
                             ),
-                            ProfileSectionCard(
-                              icon: Icons.restaurant_menu,
-                              title: 'Meal Plan',
-                              subtitle: 'Premium Weekly Subscription',
-                              onTap: _navigateToMealPreferences,
-                            ),
-                            ProfileSectionCard(
-                              icon: Icons.location_on,
-                              title: 'Address',
-                              subtitle: activeAddress,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => AddressManagementScreen(),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                GestureDetector(
+                                  onTap: _pickProfileImage,
+                                  child: AnimatedContainer(
+                                    duration: Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                    width: 120,
+                                    height: 120,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2),
+                                          blurRadius: 10,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
+                                      image: DecorationImage(
+                                        image:
+                                            _profileImage != null
+                                                ? FileImage(_profileImage!)
+                                                : AssetImage(
+                                                      'assets/profile_pic.jpg',
+                                                    )
+                                                    as ImageProvider,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Container(
+                                        padding: EdgeInsets.all(6),
+                                        margin: EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade900,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.camera_alt,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ).then((_) => _loadUserData());
-                              },
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  userName,
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Text(
+                                  _auth.currentUser?.email ?? '',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white70,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
                             ),
-                            ProfileSectionCard(
-                              icon: Icons.school,
-                              title:
-                                  _isVerified
-                                      ? 'Verified Student Discount'
-                                      : 'Student Discount',
-                              subtitle:
-                                  _isVerified
-                                      ? '10% discount activated'
-                                      : 'Verify for 10% off',
-                              onTap:
-                                  _isVerified ? null : _showVerificationSurvey,
-                            ),
-                            ProfileSectionCard(
-                              icon: Icons.support_agent,
-                              title: 'Support',
-                              subtitle: 'Chat with us on WhatsApp',
-                              onTap: _launchWhatsApp,
-                            ),
-                            ProfileSectionCard(
-                              icon: Icons.feedback,
-                              title: 'Feedback',
-                              subtitle: 'Send us your thoughts',
-                              onTap: _launchEmail,
-                            ),
-                            ProfileSectionCard(
-                              icon: Icons.admin_panel_settings,
-                              title: 'Employee Login',
-                              subtitle: 'Access admin features',
-                              onTap: _navigateToEmployeeLogin,
-                            ),
-                            ProfileSectionCard(
-                              icon: Icons.logout,
-                              title: 'Logout',
-                              subtitle: 'Sign out of your account',
-                              onTap: _logout,
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    ]),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 24,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Account Settings',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: headTextColor,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              ProfileCard(
+                                icon: Icons.person,
+                                title: 'Edit Profile',
+                                subtitle: 'Update your name and phone number',
+                                onTap: _showEditProfileDialog,
+                              ),
+                              ProfileCard(
+                                icon: Icons.restaurant_menu,
+                                title: 'Meal Plan',
+                                subtitle: 'Premium Weekly Subscription',
+                                onTap: _navigateToMealPreferences,
+                              ),
+                              ProfileCard(
+                                icon: Icons.location_on,
+                                title: 'Address',
+                                subtitle: activeAddress,
+                                onTap:
+                                    () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) =>
+                                                AddressManagementScreen(),
+                                      ),
+                                    ).then((_) => _loadUserData()),
+                              ),
+                              ProfileCard(
+                                icon: Icons.school,
+                                title:
+                                    _isVerified
+                                        ? 'Verified Student Discount'
+                                        : 'Student Discount',
+                                subtitle:
+                                    _isVerified
+                                        ? '10% discount activated'
+                                        : 'Verify for 10% off',
+                                onTap:
+                                    _isVerified
+                                        ? null
+                                        : _showVerificationSurvey,
+                                trailing:
+                                    _isVerified
+                                        ? Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green,
+                                        )
+                                        : null,
+                              ),
+                              SizedBox(height: 24),
+                              Text(
+                                'Support & More',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: headTextColor,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              ProfileCard(
+                                icon: Icons.support_agent,
+                                title: 'Support',
+                                subtitle: 'Chat with us on WhatsApp',
+                                onTap: _launchWhatsApp,
+                              ),
+                              ProfileCard(
+                                icon: Icons.feedback,
+                                title: 'Feedback',
+                                subtitle: 'Send us your thoughts',
+                                onTap: _launchEmail,
+                              ),
+                              ProfileCard(
+                                icon: Icons.admin_panel_settings,
+                                title: 'Employee Login',
+                                subtitle: 'Access admin features',
+                                onTap: _navigateToEmployeeLogin,
+                              ),
+                              ProfileCard(
+                                icon: Icons.logout,
+                                title: 'Logout',
+                                subtitle: 'Sign out of your account',
+                                onTap: _logout,
+                                color: Colors.redAccent,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -463,60 +559,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class ProfileSectionCard extends StatelessWidget {
+class ProfileCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
+  final Color? color;
+  final Widget? trailing;
 
-  const ProfileSectionCard({
+  const ProfileCard({
     required this.icon,
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.color,
+    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      margin: EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          gradient: LinearGradient(
-            colors: [Colors.blue.shade500, Colors.blue.shade900],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      margin: EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors:
+              onTap != null
+                  ? [Colors.blue.shade900, Colors.blue.shade700]
+                  : [Colors.grey.shade700, Colors.grey.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: ListTile(
-          leading: Container(
-            padding: EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade700,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.blue.shade900, size: 28),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              fontSize: 16,
-            ),
-          ),
-          subtitle: Text(
-            subtitle,
-            style: TextStyle(color: Colors.grey[400], fontSize: 14),
-          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
           onTap: onTap,
-          trailing: Icon(
-            Icons.arrow_forward_ios,
-            color: Colors.grey[600],
-            size: 16,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color ?? Colors.white, size: 28),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 14, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing ??
+                    (onTap != null
+                        ? Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.white70,
+                          size: 16,
+                        )
+                        : SizedBox()),
+              ],
+            ),
           ),
         ),
       ),

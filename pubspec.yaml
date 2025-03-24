@@ -57,6 +57,7 @@ dependencies:
   uuid: ^4.5.1                 # UUID generator
   flutter_launcher_icons: ^0.14.3 # App icon generator
   flutter_riverpod: ^2.6.1
+  firebase_storage: ^12.4.4
 
 dev_dependencies:
   flutter_test:
@@ -72,4 +73,4 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/logo_crop.png"
+  image_path: "assets/images/logo_transparent.png"

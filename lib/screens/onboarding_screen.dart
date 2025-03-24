@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
 
-import '../utils/theme.dart';
+// Placeholder theme values (replace with actual imports from ../utils/theme.dart)
+const Color backgroundColor = Colors.white;
+const Color headTextColor = Colors.black;
+const Color subHeadTextColor = Colors.grey;
+const Color buttonColor = Colors.blue;
+const Color buttonTextColor = Colors.white;
 
 class OnboardingScreen extends StatefulWidget {
   @override
@@ -27,13 +32,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     {
       "title": "Reliable Delivery",
       "subtitle":
-          "Delicious, freshly prepared meals delivered straight to your doorstep with fast and reliable service!.",
+          "Delicious, freshly prepared meals delivered straight to your doorstep with fast and reliable service!",
       "image": "assets/images/food_delivery.json",
     },
     {
       "title": "Healthy Choices",
       "subtitle":
-          "Fresh ingredients, hygienic preparation, The use of high-quality produce, careful handling, and clean cooking techniques enhance both taste and nutrition, delivering a meal that is not only delicious but also safe and nourishing.",
+          "Fresh ingredients, hygienic preparation, using high-quality produce, careful handling, and clean cooking techniques to enhance both taste and nutrition.",
       "image": "assets/images/fruits.json",
     },
   ];
@@ -85,86 +90,138 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: _pageController,
-              onPageChanged: _onPageChanged,
-              itemCount: onboardingData.length,
-              itemBuilder: (context, index) {
-                return FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SingleOnboardingScreen(
-                    title: onboardingData[index]["title"]!,
-                    subtitle: onboardingData[index]["subtitle"]!,
-                    image: onboardingData[index]["image"]!,
-                    textColor: textColor,
-                    subtitleColor: subtitleColor,
-                  ),
-                );
-              },
-            ),
-            Positioned(
-              bottom: 150,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  onboardingData.length,
-                  (index) => AnimatedContainer(
-                    duration: Duration(milliseconds: 300),
-                    margin: EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPage == index ? 20 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color:
-                          _currentPage == index
-                              ? Colors.blue
-                              : Colors.grey[400]!.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
+      body: Stack(
+        children: [
+          // Background gradient for subtle depth
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50.withOpacity(0.3), backgroundColor],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
             ),
-            Positioned(
-              bottom: 30,
-              left: 20,
-              right: 20,
-              child: GestureDetector(
-                onTap: _nextPage,
-                child: AnimatedContainer(
-                  duration: Duration(milliseconds: 300),
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: buttonColor,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    itemCount: onboardingData.length,
+                    itemBuilder: (context, index) {
+                      return FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SingleOnboardingScreen(
+                          title: onboardingData[index]["title"]!,
+                          subtitle: onboardingData[index]["subtitle"]!,
+                          image: onboardingData[index]["image"]!,
+                          textColor: textColor,
+                          subtitleColor: subtitleColor,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(bottom: 20),
+                  child: _buildPageIndicators(),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 40),
+                  child: _buildNextButton(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Page indicators with animation
+  Widget _buildPageIndicators() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        onboardingData.length,
+        (index) => AnimatedContainer(
+          duration: Duration(milliseconds: 300),
+          margin: EdgeInsets.symmetric(horizontal: 6),
+          width: _currentPage == index ? 24 : 10,
+          height: 10,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors:
+                  _currentPage == index
+                      ? [Colors.blue.shade900, Colors.blue.shade600]
+                      : [Colors.grey.shade400, Colors.grey.shade300],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(5),
+            boxShadow:
+                _currentPage == index
+                    ? [
                       BoxShadow(
                         color: Colors.blue.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
+                        blurRadius: 6,
+                        offset: Offset(0, 3),
                       ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      _currentPage == onboardingData.length - 1
-                          ? "Get Started"
-                          : "Next",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: buttonTextColor,
-                      ),
-                    ),
-                  ),
-                ),
+                    ]
+                    : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Next/Get Started button with animation
+  Widget _buildNextButton() {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _nextPage,
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 18),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade900, Colors.blue.shade700],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.4),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.symmetric(vertical: 18),
+          child: Center(
+            child: Text(
+              _currentPage == onboardingData.length - 1
+                  ? "Get Started"
+                  : "Next",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: buttonTextColor,
+                letterSpacing: 0.5,
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -215,21 +272,28 @@ class SingleOnboardingScreen extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
               color: textColor,
-              letterSpacing: 0.5,
+              letterSpacing: 0.8,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 16),
+          SizedBox(height: 20),
           Text(
             subtitle,
             style: TextStyle(
               fontSize: 16,
               color: subtitleColor,
               fontWeight: FontWeight.w400,
-              height: 1.4,
+              height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
@@ -247,8 +311,8 @@ class AmoebaPainter extends CustomPainter {
         Paint()
           ..shader = LinearGradient(
             colors: [
-              Colors.blue.withOpacity(0.3),
-              Colors.purple.withOpacity(0.3),
+              Colors.blue.shade900.withOpacity(0.4),
+              Colors.purple.shade700.withOpacity(0.4),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -257,9 +321,8 @@ class AmoebaPainter extends CustomPainter {
 
     final path = Path();
     final random = Random();
-    final points = 12; // Increased points for smoother edges
+    const points = 12;
 
-    // Generate control points
     List<Offset> controlPoints = [];
     for (int i = 0; i < points; i++) {
       double angle = (2 * pi / points) * i;
@@ -270,15 +333,12 @@ class AmoebaPainter extends CustomPainter {
       controlPoints.add(Offset(x, y));
     }
 
-    // Start at first point
     path.moveTo(controlPoints[0].dx, controlPoints[0].dy);
 
-    // Create smooth curves using cubic Bezier
     for (int i = 0; i < controlPoints.length; i++) {
       int nextIndex = (i + 1) % controlPoints.length;
       int prevIndex = (i - 1 + controlPoints.length) % controlPoints.length;
 
-      // Calculate control points for smooth curves
       Offset midPoint = Offset(
         (controlPoints[i].dx + controlPoints[nextIndex].dx) / 2,
         (controlPoints[i].dy + controlPoints[nextIndex].dy) / 2,
@@ -311,7 +371,7 @@ class AmoebaPainter extends CustomPainter {
     }
     path.close();
 
-    canvas.drawShadow(path, Colors.black.withOpacity(0.2), 4.0, false);
+    canvas.drawShadow(path, Colors.black.withOpacity(0.2), 6.0, false);
     canvas.drawPath(path, paint);
   }
 

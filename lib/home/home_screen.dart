@@ -1,11 +1,11 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:eazy_meals/utils/theme.dart';
-import 'package:flip_card/flip_card.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:flip_card/flip_card.dart';
 import 'package:path_provider/path_provider.dart';
 import '../controllers/banner_controller.dart';
 import '../controllers/order_status_controller.dart';
@@ -19,11 +19,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final BannerController bannerController = Get.put(BannerController());
-  final OrderController orderController =
-      Get.find<OrderController>(); // Use existing controller
+  final OrderController orderController = Get.find<OrderController>();
   final TextEditingController _searchController = TextEditingController();
   RxBool isSwitched = false.obs;
-  RxBool isChecked = false.obs; // Will sync with controller
+  RxBool isChecked = false.obs;
   String userName = 'User';
   File? _profileImage;
   String greeting = 'Good Morning';
@@ -34,6 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isStudentVerified = false;
   String? activeAddress;
   DateTime? _pauseStartTime;
+  StreamSubscription<QuerySnapshot>? _orderSubscription;
+  Timer? _dailyRefreshTimer;
 
   @override
   void initState() {
@@ -42,6 +43,55 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadProfileImage();
     _setGreeting();
     _searchController.addListener(_filterItems);
+    _startOrderListener(); // Immediate check on app open
+    _scheduleDailyOrderCheck(); // Schedule daily refresh
+  }
+
+  void _scheduleDailyOrderCheck() {
+    final now = DateTime.now();
+    var next9AM = DateTime(now.year, now.month, now.day, 9, 0);
+    if (now.isAfter(next9AM)) {
+      next9AM = next9AM.add(Duration(days: 1)); // Move to tomorrow if past 9 AM
+    }
+    final durationUntil9AM = next9AM.difference(now);
+
+    _dailyRefreshTimer?.cancel(); // Cancel any existing timer
+    _dailyRefreshTimer = Timer(durationUntil9AM, () {
+      _startOrderListener();
+      _dailyRefreshTimer = Timer.periodic(Duration(days: 1), (_) {
+        _startOrderListener();
+      });
+    });
+  }
+
+  void _startOrderListener() {
+    _orderSubscription?.cancel(); // Cancel any existing listener
+    User? user = _auth.currentUser;
+    if (user != null) {
+      DateTime now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      _orderSubscription = _firestore
+          .collection('orders')
+          .where('userId', isEqualTo: user.uid)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
+          .snapshots()
+          .listen((snapshot) {
+            if (snapshot.docs.isNotEmpty) {
+              final order = snapshot.docs.first.data() as Map<String, dynamic>;
+              final status = order['status'] ?? 'Pending Delivery';
+              orderController.updateOrderStatus(status);
+              if (status == 'Delivered') {
+                _orderSubscription?.cancel();
+                _orderSubscription = null; // Stop listening until next 9 AM
+              }
+            } else {
+              orderController.updateOrderStatus('No Order');
+            }
+          });
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -68,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 data['pausedAt'] != null
                     ? (data['pausedAt'] as Timestamp).toDate()
                     : null;
-
             if (isSubscribed && data['subscriptionPlan'] != null) {
               String plan = data['subscriptionPlan'];
               Timestamp? createdAt = data['createdAt'];
@@ -97,9 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final imagePath = '${directory.path}/profile_image.jpg';
       final file = File(imagePath);
-      if (await file.exists()) {
-        setState(() => _profileImage = file);
-      }
+      if (await file.exists()) setState(() => _profileImage = file);
     } catch (e) {
       print('Error loading profile image: $e');
     }
@@ -109,59 +156,50 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final hour = now.hour;
     setState(() {
-      if (hour >= 5 && hour < 12) {
-        greeting = 'Good Morning';
-      } else if (hour >= 12 && hour < 17) {
-        greeting = 'Good Afternoon';
-      } else if (hour >= 17 && hour < 20) {
-        greeting = 'Good Evening';
-      } else {
-        greeting = 'Good Night';
-      }
+      greeting =
+          hour >= 5 && hour < 12
+              ? 'Good Morning'
+              : hour >= 12 && hour < 17
+              ? 'Good Afternoon'
+              : hour >= 17 && hour < 20
+              ? 'Good Evening'
+              : 'Good Night';
     });
   }
 
   bool _canPauseOrPlay() {
     final now = DateTime.now();
-    final hour = now.hour;
-    return isSubscribed && (hour >= 9 && hour < 22); // Allowed 9 AM - 10 PM
+    return isSubscribed && (now.hour >= 9 && now.hour < 22);
   }
 
   Future<void> _togglePausePlay() async {
     User? user = _auth.currentUser;
     if (user == null || !isSubscribed || subscriptionEndDate == null) return;
-
     bool newIsPaused = !isSwitched.value;
     if (_canPauseOrPlay()) {
       setState(() {
-        if (isSwitched.value) {
-          if (_pauseStartTime != null) {
-            final pausedDuration =
-                DateTime.now().difference(_pauseStartTime!).inSeconds;
-            subscriptionEndDate = subscriptionEndDate!.add(
-              Duration(seconds: pausedDuration),
-            );
-            _pauseStartTime = null;
-          }
+        if (isSwitched.value && _pauseStartTime != null) {
+          final pausedDuration =
+              DateTime.now().difference(_pauseStartTime!).inSeconds;
+          subscriptionEndDate = subscriptionEndDate!.add(
+            Duration(seconds: pausedDuration),
+          );
+          _pauseStartTime = null;
           isSwitched.value = false;
         } else {
           _pauseStartTime = DateTime.now();
           isSwitched.value = true;
         }
       });
-
       try {
         await _firestore.collection('users').doc(user.uid).update({
           'isPaused': newIsPaused,
           'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
           'subscriptionEndDate': Timestamp.fromDate(subscriptionEndDate!),
         });
-
-        if (newIsPaused) {
-          await _markNextDayPaused(user.uid);
-        } else {
-          await _resumeNextDay(user.uid);
-        }
+        newIsPaused
+            ? await _markNextDayPaused(user.uid)
+            : await _resumeNextDay(user.uid);
       } catch (e) {
         print('Error in togglePausePlay: $e');
         setState(() => isSwitched.value = !newIsPaused);
@@ -200,7 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
       59,
       59,
     );
-
     QuerySnapshot orders =
         await _firestore
             .collection('orders')
@@ -212,7 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
             )
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
-
     for (var order in orders.docs) {
       await order.reference.update({'status': 'Paused'});
     }
@@ -240,7 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
       59,
       59,
     );
-
     QuerySnapshot orders =
         await _firestore
             .collection('orders')
@@ -252,7 +287,6 @@ class _HomeScreenState extends State<HomeScreen> {
             )
             .where('date', isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd))
             .get();
-
     for (var order in orders.docs) {
       await order.reference.update({'status': 'Pending Delivery'});
     }
@@ -261,51 +295,48 @@ class _HomeScreenState extends State<HomeScreen> {
   void _initializeItems() {
     allItems = [
       {
-        'title': 'Pause and Play',
+        'title': 'Pause & Play',
         'description':
-            'You can pause and play your subscription according to your wishes this way you can save the money and the dish',
+            'Pause or resume your subscription anytime between 9 AM - 10 PM.',
         'icon': Iconsax.play,
-        'secondaryIcon': Iconsax.arrow_circle_right,
         'extraWidget': Obx(
           () => Switch(
             value: isSwitched.value,
             onChanged: isSubscribed ? (value) => _togglePausePlay() : null,
-            activeColor: Colors.blue.shade200,
+            activeColor: Colors.blue[600],
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.blue.shade900,
+            inactiveTrackColor: Colors.blue[200],
           ),
         ),
       },
       {
         'title': 'Today\'s Order',
-        'subtitle':
+        'subtitle': Obx(
+          () => Text(
             isSubscribed
-                ? 'Check your order status'
-                : 'You are not subscribed to any plan yet',
-        'description':
-            'You can see the current day\'s order status from here you can also check the orders page for more information',
-        'icon': null,
-        'secondaryIcon': Iconsax.arrow_circle_right,
-        'extraWidget': Obx(
-          () => Checkbox(
-            value:
-                orderController.isTodayOrderDelivered.value, // Use controller
-            onChanged: null, // Read-only
-            activeColor: Colors.blue.shade200,
-            checkColor: Colors.blue.shade900,
-            side: BorderSide(
-              color:
-                  orderController.isTodayOrderDelivered.value
-                      ? Colors.blue.shade200
-                      : Colors.orange,
-              width: 1.5,
+                ? orderController.todayOrderStatus.value
+                : 'Subscribe to see today\'s order',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
-            fillColor: MaterialStateProperty.resolveWith((states) {
-              if (!states.contains(MaterialState.selected)) {
-                return Colors.blue.shade900;
-              }
-              return null;
-            }),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        'description': 'View the status of your current day\'s order.',
+        'icon': Iconsax.truck_fast,
+        'extraWidget': Obx(
+          () => Icon(
+            orderController.todayOrderStatus.value == 'Delivered'
+                ? Icons.check_circle
+                : Icons.pending,
+            color:
+                orderController.todayOrderStatus.value == 'Delivered'
+                    ? Colors.green
+                    : Colors.orange,
+            size: 24,
           ),
         ),
       },
@@ -313,14 +344,13 @@ class _HomeScreenState extends State<HomeScreen> {
         'title':
             isSubscribed && subscriptionEndDate != null
                 ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
-                : '0 Days Left',
+                : 'No Plan Active',
         'subtitle':
-            isSubscribed
-                ? 'Your plan ends on ${subscriptionEndDate?.toString().substring(0, 10) ?? ''}'
+            isSubscribed && subscriptionEndDate != null
+                ? 'Ends on ${subscriptionEndDate!.toString().substring(0, 10)}'
                 : 'Subscribe to a plan',
-        'description': 'Check the orders section for more details',
-        'icon': null,
-        'secondaryIcon': Iconsax.arrow_circle_right,
+        'description': 'Monitor your subscription duration and details.',
+        'icon': Iconsax.calendar,
         'extraWidget': Stack(
           alignment: Alignment.center,
           children: [
@@ -344,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             .clamp(0.0, 1.0)
                         : 0.0,
                 strokeWidth: 5,
-                backgroundColor: Colors.white30,
+                backgroundColor: Colors.white.withOpacity(0.2),
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
               ),
             ),
@@ -352,7 +382,11 @@ class _HomeScreenState extends State<HomeScreen> {
               isSubscribed && subscriptionEndDate != null
                   ? '${((subscriptionEndDate!.difference(DateTime.now()).inDays / (subscriptionEndDate!.difference(subscriptionEndDate!.subtract(Duration(days: 28))).inDays.abs())) * 100).round()}%'
                   : '0%',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -361,31 +395,22 @@ class _HomeScreenState extends State<HomeScreen> {
         'title': 'Student Verification',
         'subtitle':
             isStudentVerified
-                ? 'You are verified (10% discount active)'
-                : 'Complete your student verification to get 10% discount',
-        'description':
-            'Complete your student verification with your university ID to get 10% discount',
+                ? 'Verified (10% off)'
+                : 'Verify for 10% discount',
+        'description': 'Verify your student status for a 10% discount.',
         'icon': Iconsax.user_edit,
-        'secondaryIcon': Iconsax.arrow_circle_right,
-        'extraWidget': null,
       },
       {
-        'title': 'Your Active Address',
-        'subtitle': activeAddress ?? 'No active address set',
-        'description':
-            'You can add multiple addresses and set to an active address then our team can easily reach you in your place',
+        'title': 'Active Address',
+        'subtitle': activeAddress ?? 'Set an address',
+        'description': 'Manage addresses for seamless delivery.',
         'icon': Iconsax.location,
-        'secondaryIcon': Iconsax.arrow_circle_right,
-        'extraWidget': null,
       },
       {
         'title': 'Support Us',
-        'subtitle': 'Report bugs as well as inform your feedback',
-        'description':
-            'Please feel free to inform your ideas and feedbacks, also don\'t forget to report an issue if you find anything',
+        'subtitle': 'Share feedback & report issues',
+        'description': 'Help us improve by sharing feedback.',
         'icon': Iconsax.heart,
-        'secondaryIcon': Iconsax.arrow_circle_right,
-        'extraWidget': null,
       },
     ];
     filteredItems = List.from(allItems);
@@ -402,271 +427,282 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _orderSubscription?.cancel();
+    _dailyRefreshTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Icon(null),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Center(
-          child: Text(
-            'Home',
-            style: TextStyle(
-              color: appbarMenuTextColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10.0),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundImage:
-                  _profileImage != null
-                      ? FileImage(_profileImage!)
-                      : AssetImage('assets/profile_pic.jpg') as ImageProvider,
-            ),
-          ),
-        ],
-      ),
-      backgroundColor: backgroundColor,
-      body: SingleChildScrollView(
-        physics: BouncingScrollPhysics(),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hi $userName!👋🏼',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                          color: headTextColor,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                      Text(
-                        greeting,
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                      SizedBox(height: 20),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: TextField(
-                          controller: _searchController,
-                          cursorColor: Colors.transparent,
-                          decoration: InputDecoration(
-                            prefixIcon: Icon(Icons.search, color: Colors.blue),
-                            hintText: 'Search...',
-                            hintStyle: TextStyle(color: Colors.blue.shade500),
-                            filled: true,
-                            fillColor: Colors.grey[300],
-                            border: InputBorder.none,
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide.none,
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide.none,
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    '  Browse',
-                    style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.bold,
-                      color: headTextColor,
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              backgroundColor: Colors.white,
+              pinned: true,
+              elevation: 0,
+              expandedHeight: 140,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue[50]!, Colors.white],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: GridView.builder(
-                    physics: NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 5,
-                      mainAxisSpacing: 5,
-                      childAspectRatio: 0.8,
-                    ),
-                    itemCount: filteredItems.length,
-                    itemBuilder: (context, index) {
-                      Gradient gradient = LinearGradient(
-                        colors: [Colors.blue.shade900, Colors.blue.shade600],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      );
-
-                      return FlipCard(
-                        direction: FlipDirection.HORIZONTAL,
-                        front: Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          elevation: 2,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: gradient,
-                            ),
-                            child: Stack(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      if (filteredItems[index]['extraWidget'] !=
-                                              null &&
-                                          index != 0 &&
-                                          index != 1)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 10,
-                                          ),
-                                          child:
-                                              filteredItems[index]['extraWidget'],
-                                        ),
-                                      if (filteredItems[index]['extraWidget'] !=
-                                              null &&
-                                          index != 0 &&
-                                          index != 1)
-                                        SizedBox(height: 10),
-                                      Text(
-                                        filteredItems[index]['title']!,
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      SizedBox(height: 10),
-                                      index == 0
-                                          ? Obx(
-                                            () => Text(
-                                              isSubscribed
-                                                  ? (!_canPauseOrPlay()
-                                                      ? 'You are currently ${isSwitched.value ? 'paused' : 'ongoing'}, you can’t switch between these times'
-                                                      : (isSwitched.value
-                                                          ? 'You are currently paused'
-                                                          : 'You are currently ongoing'))
-                                                  : 'Currently not subscribed',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white.withOpacity(
-                                                  0.8,
-                                                ),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 2,
-                                            ),
-                                          )
-                                          : Text(
-                                            filteredItems[index]['subtitle']!,
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.white.withOpacity(
-                                                0.8,
-                                              ),
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 2,
-                                          ),
-                                    ],
+                                Text(
+                                  'Hi, $userName!',
+                                  style: TextStyle(
+                                    color: Colors.blue[900],
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w700,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
-                                if (filteredItems[index]['icon'] != null)
-                                  Positioned(
-                                    top: 10,
-                                    left: 10,
-                                    child: Icon(
-                                      filteredItems[index]['icon'],
-                                      color: Colors.orange,
-                                      size: 30,
-                                    ),
-                                  ),
-                                if (index == 1 &&
-                                    filteredItems[index]['extraWidget'] != null)
-                                  Positioned(
-                                    top: 10,
-                                    left: 10,
-                                    child: filteredItems[index]['extraWidget'],
-                                  ),
-                                if (filteredItems[index]['secondaryIcon'] !=
-                                    null)
-                                  Positioned(
-                                    top: 15,
-                                    right: 15,
-                                    child: Icon(
-                                      filteredItems[index]['secondaryIcon'],
-                                      color: Colors.blue.shade200,
-                                      size: 30,
-                                    ),
-                                  ),
-                                if (index == 0 &&
-                                    filteredItems[index]['extraWidget'] != null)
-                                  Positioned(
-                                    top: 5,
-                                    right: 5,
-                                    child: filteredItems[index]['extraWidget'],
-                                  ),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Iconsax.profile_tick,
+                                  color: Colors.blue[700],
+                                  size: 24,
+                                ),
                               ],
                             ),
-                          ),
-                        ),
-                        back: Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          elevation: 2,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: gradient,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    filteredItems[index]['description']!,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                            Text(
+                              greeting,
+                              style: TextStyle(
+                                color: Colors.blue[600],
+                                fontSize: 16,
                               ),
                             ),
+                          ],
+                        ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.blue[200]!,
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            backgroundImage:
+                                _profileImage != null
+                                    ? FileImage(_profileImage!)
+                                    : const AssetImage('assets/profile_pic.jpg')
+                                        as ImageProvider,
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
                 ),
-                SizedBox(height: 20),
-              ],
+              ),
+              title: Text(
+                'Home',
+                style: TextStyle(
+                  color: Colors.blue[900],
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              centerTitle: true,
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search options...',
+                    hintStyle: TextStyle(color: Colors.blue[400], fontSize: 16),
+                    prefixIcon: Icon(
+                      Iconsax.search_normal,
+                      color: Colors.blue[600],
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.blue[100]!,
+                        width: 1,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.blue[300]!,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.75,
+                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final item = filteredItems[index];
+                  return FlipCard(
+                    direction: FlipDirection.HORIZONTAL,
+                    front: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      child: Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.blue[700]!, Colors.blue[900]!],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  if (item['icon'] != null)
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        item['icon'],
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  if (item['extraWidget'] != null)
+                                    item['extraWidget'],
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                item['title']!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              item['subtitle'] is Widget
+                                  ? item['subtitle']
+                                  : Text(
+                                    index == 0
+                                        ? (isSubscribed
+                                            ? (!_canPauseOrPlay()
+                                                ? 'Switch unavailable now'
+                                                : (isSwitched.value
+                                                    ? 'Paused'
+                                                    : 'Active'))
+                                            : 'Not subscribed')
+                                        : item['subtitle']!,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    back: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.blue[700]!, Colors.blue[900]!],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              item['description']!,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              maxLines: 5,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }, childCount: filteredItems.length),
+              ),
             ),
           ],
         ),
@@ -675,13 +711,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Placeholder class for LocationDetails
 class LocationDetails {
   final String address;
   LocationDetails(this.address);
-  factory LocationDetails.fromMap(Map<String, dynamic> map) {
-    return LocationDetails(map['address'] ?? '');
-  }
+  factory LocationDetails.fromMap(Map<String, dynamic> map) =>
+      LocationDetails(map['address'] ?? '');
   @override
   String toString() => address;
 }

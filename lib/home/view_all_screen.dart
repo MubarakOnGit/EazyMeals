@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:eazy_meals/utils/menu_utils.dart'; // Adjust path
 
 class ViewAllScreen extends StatefulWidget {
   @override
@@ -11,13 +11,15 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
   final int currentDayIndex = 7;
   String _selectedCategory = 'Veg';
   final List<String> _categories = ['Veg', 'South Indian', 'North Indian'];
-  DateTime _currentDate = DateTime.now();
+  DateTime _baseDate = DateTime.now().subtract(Duration(days: 7));
+  Map<String, Map<String, dynamic>> _menuCache = {};
 
   @override
   void initState() {
     super.initState();
+    _fetchMenuData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.jumpTo(currentDayIndex * 150.0);
+      _scrollController.jumpTo(currentDayIndex * 160.0);
     });
   }
 
@@ -27,158 +29,130 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
     super.dispose();
   }
 
-  String _getWeekday(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Mon';
-      case 2:
-        return 'Tue';
-      case 3:
-        return 'Wed';
-      case 4:
-        return 'Thu';
-      case 5:
-        return 'Fri';
-      case 6:
-        return 'Sat';
-      case 7:
-        return 'Sun';
-      default:
-        return '';
-    }
+  Future<void> _fetchMenuData() async {
+    _menuCache = await MenuUtils.fetchMenuData(baseDate: _baseDate);
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade900,
-      appBar: AppBar(
-        backgroundColor: Colors.grey.shade900,
-        leading: IconButton(
-          color: Colors.white,
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Menu',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Wrap(
-              spacing: 12,
-              alignment: WrapAlignment.center,
-              children:
-                  _categories.map((category) {
-                    return ChoiceChip(
-                      label: Text(category),
-                      selected: _selectedCategory == category,
-                      onSelected:
-                          (selected) =>
-                              setState(() => _selectedCategory = category),
-                      selectedColor: Colors.blue,
-                      labelStyle: TextStyle(
-                        color:
-                            _selectedCategory == category
-                                ? Colors.white
-                                : Colors.black,
-                      ),
-                    );
-                  }).toList(),
+      backgroundColor: const Color(0xFFF8FAFC), // Soft off-white background
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            pinned: true,
+            leading: IconButton(
+              icon: Icon(
+                Icons.arrow_back_ios,
+                color: Colors.indigo[900],
+                size: 22,
+              ),
+              onPressed: () => Navigator.pop(context),
+              splashRadius: 20,
+            ),
+            title: Text(
+              'Explore Menus',
+              style: TextStyle(
+                color: Colors.indigo[900],
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+            centerTitle: true,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(60),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                color: Colors.white,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children:
+                        _categories.map((category) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeInOut,
+                              child: FilterChip(
+                                label: Text(category),
+                                selected: _selectedCategory == category,
+                                onSelected:
+                                    (selected) => setState(
+                                      () => _selectedCategory = category,
+                                    ),
+                                backgroundColor: Colors.indigo[50],
+                                selectedColor: Colors.indigo[600],
+                                checkmarkColor: Colors.white,
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 2,
+                                ),
+                                labelStyle: TextStyle(
+                                  color:
+                                      _selectedCategory == category
+                                          ? Colors.white
+                                          : Colors.indigo[800],
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                  side: BorderSide(
+                                    color: Colors.indigo[200]!,
+                                    width: 1,
+                                  ),
+                                ),
+                                elevation:
+                                    _selectedCategory == category ? 3 : 0,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                  ),
+                ),
+              ),
             ),
           ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('menus')
-                      .where('category', isEqualTo: _selectedCategory)
-                      .where(
-                        'weekNumber',
-                        isGreaterThanOrEqualTo:
-                            _currentDate.subtract(Duration(days: 7)).weekOfYear,
-                      )
-                      .where(
-                        'weekNumber',
-                        isLessThanOrEqualTo:
-                            _currentDate.add(Duration(days: 28)).weekOfYear,
-                      )
-                      .orderBy('weekNumber')
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-                final menus =
-                    snapshot.data!.docs
-                        .map((doc) => doc.data() as Map<String, dynamic>)
-                        .toList();
-
-                return ListView.builder(
-                  controller: _scrollController,
-                  physics: BouncingScrollPhysics(),
-                  itemCount: 35,
-                  itemBuilder: (context, index) {
-                    DateTime baseDate = DateTime.now();
-                    DateTime startDate = baseDate.subtract(Duration(days: 7));
-                    DateTime date = startDate.add(Duration(days: index));
-                    final menu = menus.firstWhere(
-                      (menu) => menu['weekNumber'] == date.weekOfYear,
-                      orElse: () => {},
-                    );
-                    final items = menu['items'] as List<dynamic>? ?? [];
-                    final lunchItem = items.firstWhere(
-                      (item) =>
-                          item['mealType'] == 'Lunch' &&
-                          item['day'] == _getWeekday(date.weekday),
-                      orElse: () => {'item': 'No item'},
-                    );
-                    final dinnerItem = items.firstWhere(
-                      (item) =>
-                          item['mealType'] == 'Dinner' &&
-                          item['day'] == _getWeekday(date.weekday),
-                      orElse: () => {'item': 'No item'},
-                    );
-                    Color cardColor = _getCardColor(index);
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${date.day}/${date.month}',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
-                          ),
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              children: [
-                                _buildSimpleCard(
-                                  'Lunch',
-                                  lunchItem['item'],
-                                  cardColor,
-                                ),
-                                _buildSimpleCard(
-                                  'Dinner',
-                                  dinnerItem['item'],
-                                  cardColor,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                DateTime date = _baseDate.add(Duration(days: index));
+                final menu = _menuCache[_selectedCategory] ?? {};
+                final items = menu['items'] as List<dynamic>? ?? [];
+                final dateStr = MenuUtils.getDateString(date);
+                final lunchItem = items.firstWhere(
+                  (item) =>
+                      item['mealType'] == 'Lunch' && item['date'] == dateStr,
+                  orElse: () => {'item': 'Not Available'},
                 );
-              },
+                final dinnerItem = items.firstWhere(
+                  (item) =>
+                      item['mealType'] == 'Dinner' && item['date'] == dateStr,
+                  orElse: () => {'item': 'Not Available'},
+                );
+                print(
+                  'ViewAllScreen Lunch for $_selectedCategory on $dateStr: ${lunchItem['item']}',
+                );
+                print(
+                  'ViewAllScreen Dinner for $_selectedCategory on $dateStr: ${dinnerItem['item']}',
+                );
+
+                return _buildDaySection(
+                  dateStr,
+                  lunchItem['item'],
+                  dinnerItem['item'],
+                  index,
+                );
+              }, childCount: 35),
             ),
           ),
         ],
@@ -186,36 +160,132 @@ class _ViewAllScreenState extends State<ViewAllScreen> {
     );
   }
 
-  Color _getCardColor(int index) {
-    if (index == currentDayIndex)
-      return Colors.blue.shade100;
-    else if (index < currentDayIndex)
-      return Colors.red.shade100;
-    else
-      return Colors.green.shade100;
-  }
-
-  Widget _buildSimpleCard(String meal, String item, Color cardColor) {
-    return Card(
-      elevation: 2,
-      color: cardColor,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [Text('$meal: $item')],
-        ),
+  Widget _buildDaySection(
+    String dateStr,
+    String lunchItem,
+    String dinnerItem,
+    int index,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            dateStr,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.indigo[900],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildMealCard('Lunch', lunchItem, index),
+          const SizedBox(height: 12),
+          _buildMealCard('Dinner', dinnerItem, index),
+        ],
       ),
     );
   }
-}
 
-extension DateTimeExtension on DateTime {
-  int get weekOfYear {
-    final startOfYear = DateTime(year, 1, 1);
-    final firstMonday = startOfYear.add(
-      Duration(days: (8 - startOfYear.weekday) % 7),
+  Widget _buildMealCard(String meal, String item, int index) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.blue.shade700, // Changed to blue shade 700
+                Colors.blue.shade900, // Changed to blue shade 900
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  meal == 'Lunch' ? Icons.wb_sunny : Icons.nightlight,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          meal,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                index == currentDayIndex
+                                    ? Colors.blue[200]
+                                    : index < currentDayIndex
+                                    ? Colors.red[200]
+                                    : Colors.green[200],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            index == currentDayIndex
+                                ? 'Today'
+                                : index < currentDayIndex
+                                ? 'Past'
+                                : 'Upcoming',
+                            style: TextStyle(
+                              color: Colors.blue[900],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    return (difference(firstMonday).inDays / 7).floor() + 1;
   }
 }
