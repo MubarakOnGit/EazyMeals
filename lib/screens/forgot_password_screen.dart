@@ -1,11 +1,13 @@
-import 'package:eazy_meals/utils/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({super.key});
+
   @override
-  _ForgotPasswordScreenState createState() => _ForgotPasswordScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
@@ -34,20 +36,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
 
     try {
-      // First check if the email exists
-      List<String> signInMethods = await FirebaseAuth.instance
-          .fetchSignInMethodsForEmail(email);
-
-      if (signInMethods.isEmpty) {
-        throw FirebaseAuthException(
-          code: 'user-not-found',
-          message: 'No account found with this email',
-        );
-      }
-
-      // If email exists, send reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showGlassSnackBar(
         context: context,
@@ -55,28 +48,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         message: 'Check your inbox for password reset instructions',
         type: 'success',
       );
+
+      Navigator.pop(context); // Return to previous screen after success
     } on FirebaseAuthException catch (e) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       String message;
 
       switch (e.code) {
-        case 'user-not-found':
-          message = 'No account found with this email';
-          break;
         case 'invalid-email':
           message = 'Please enter a valid email address';
           break;
-        case 'auth/invalid-email':
-          message = 'The email address is invalid';
-          break;
-        case 'auth/user-disabled':
-          message = 'This account has been disabled';
+        case 'user-not-found':
+          message = 'No account found with this email';
           break;
         case 'too-many-requests':
           message = 'Too many attempts, please try again later';
           break;
         default:
-          message = 'Failed to send reset email: ${e.message}';
+          message =
+              'Failed to send reset email: ${e.message ?? "Unknown error"}';
       }
 
       showGlassSnackBar(
@@ -86,6 +79,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         type: 'error',
       );
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showGlassSnackBar(
         context: context,
@@ -94,90 +90,114 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         type: 'error',
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Forgot Password',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: headTextColor,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Enter your email to reset your password',
-                style: TextStyle(fontSize: 16, color: subHeadTextColor),
-              ),
-              SizedBox(height: 40),
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: Colors.blue[900]!),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: Colors.grey),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width * 0.1, // Responsive
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Forgot Password',
+                  style: TextStyle(
+                    fontSize:
+                        MediaQuery.of(context).size.width * 0.08, // Responsive
+                    fontWeight: FontWeight.w800,
+                    color: headTextColor,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                style: TextStyle(color: Colors.black),
-              ),
-              SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _sendPasswordResetEmail,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
-                    padding: EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
+                SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+                Text(
+                  'Enter your email to reset your password',
+                  style: const TextStyle(fontSize: 16, color: subHeadTextColor),
+                ),
+                SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(color: Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: Colors.blue[900]!),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(color: Colors.grey),
                     ),
                   ),
-                  child:
-                      _isLoading
-                          ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                          : Text(
-                            'Reset Password',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: buttonTextColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                  style: const TextStyle(color: subHeadTextColor),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your email';
+                    }
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
                 ),
-              ),
-            ],
+                SizedBox(height: MediaQuery.of(context).size.height * 0.04),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _sendPasswordResetEmail,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[900],
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: buttonTextColor,
+                                strokeWidth: 2,
+                              ),
+                            )
+                            : const Text(
+                              'Reset Password',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: buttonTextColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

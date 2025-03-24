@@ -9,8 +9,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key}); // Add const constructor
+
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState(); // Fix: Use State<SplashScreen>
 }
 
 class _SplashScreenState extends State<SplashScreen>
@@ -23,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: Duration(seconds: 3),
+      duration: const Duration(seconds: 3),
       vsync: this,
     );
     _progressAnimation = Tween<double>(
@@ -31,7 +33,7 @@ class _SplashScreenState extends State<SplashScreen>
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _controller.forward().whenComplete(() => _checkAuthAndMenu());
+    _controller.forward().whenComplete(_checkAuthAndMenu);
   }
 
   Future<String> _getLocalFilePath() async {
@@ -41,15 +43,17 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _downloadMenuFile() async {
     try {
-      Reference ref = _storage.ref().child('menus/menu.json');
-      String downloadUrl = await ref.getDownloadURL();
+      final ref = _storage.ref().child('menus/menu.json');
+      final downloadUrl = await ref.getDownloadURL();
       final response = await http.get(Uri.parse(downloadUrl));
       if (response.statusCode == 200) {
         final filePath = await _getLocalFilePath();
         final file = File(filePath);
         await file.writeAsString(response.body);
-      } else {}
-    } catch (e) {}
+      }
+    } catch (_) {
+      // Silently handle errors; app proceeds with local file if available
+    }
   }
 
   Future<Map<String, dynamic>> _loadLocalMenu() async {
@@ -57,12 +61,11 @@ class _SplashScreenState extends State<SplashScreen>
       final filePath = await _getLocalFilePath();
       final file = File(filePath);
       if (await file.exists()) {
-        String jsonString = await file.readAsString();
-        return jsonDecode(jsonString);
+        final jsonString = await file.readAsString();
+        return jsonDecode(jsonString) as Map<String, dynamic>;
       }
       return {'version': '0.00', 'menus': []};
-    } catch (e) {
-      print('Error loading local menu: $e');
+    } catch (_) {
       return {'version': '0.00', 'menus': []};
     }
   }
@@ -82,9 +85,9 @@ class _SplashScreenState extends State<SplashScreen>
       return true;
     }
 
-    // Otherwise, check once daily after 12 AM
+    // Check once daily after 12 AM
     final now = DateTime.now();
-    final todayMidnight = DateTime(now.year, now.month, now.day, 0, 0);
+    final todayMidnight = DateTime(now.year, now.month, now.day);
     final lastCheck = DateTime.fromMillisecondsSinceEpoch(lastCheckTimestamp);
 
     if (lastCheck.isBefore(todayMidnight) && now.isAfter(todayMidnight)) {
@@ -95,36 +98,24 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkMenuFile() async {
-    if (!await _shouldCheckForUpdate()) {
-      return;
-    }
+    if (!await _shouldCheckForUpdate()) return;
 
     final filePath = await _getLocalFilePath();
     final file = File(filePath);
+    final localData = await _loadLocalMenu();
+    final localVersion = localData['version'] ?? '0.00';
 
-    // Load local version
-    Map<String, dynamic> localData = await _loadLocalMenu();
-    String localVersion = localData['version'] ?? '0.00';
-
-    // Check remote version via metadata
     try {
-      Reference ref = _storage.ref().child('menus/menu.json');
-      FullMetadata metadata = await ref.getMetadata();
-      String remoteVersion = metadata.customMetadata?['version'] ?? '0.00';
+      final ref = _storage.ref().child('menus/menu.json');
+      final metadata = await ref.getMetadata();
+      final remoteVersion = metadata.customMetadata?['version'] ?? '0.00';
 
-      // Compare versions and update if needed
       if (!await file.exists() || localVersion != remoteVersion) {
-        print(
-          'Local version ($localVersion) differs from remote ($remoteVersion), downloading update...',
-        );
         if (await file.exists()) await file.delete();
         await _downloadMenuFile();
-      } else {
-        print('Menu is up-to-date (version $localVersion)');
       }
-    } catch (e) {
-      print('Error checking menu file version: $e');
-      // Proceed with local file if offline or error occurs
+    } catch (_) {
+      // Proceed with local file if network fails
     }
   }
 
@@ -135,12 +126,18 @@ class _SplashScreenState extends State<SplashScreen>
     if (user != null) {
       await user.reload();
       if (user.emailVerified) {
-        Navigator.pushReplacementNamed(context, '/CustomerDashboard');
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/CustomerDashboard');
+        }
       } else {
-        Navigator.pushReplacementNamed(context, '/verification');
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/verification');
+        }
       }
     } else {
-      Navigator.pushReplacementNamed(context, '/onboarding');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/onboarding');
+      }
     }
   }
 
@@ -154,36 +151,50 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: Stack(
-        children: [
-          Center(
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 300,
-              height: 300,
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 20,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: AnimatedBuilder(
-                animation: _progressAnimation,
-                builder: (context, child) {
-                  return LinearProgressIndicator(
-                    value: _progressAnimation.value,
-                    backgroundColor: Colors.white24,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(10),
-                  );
-                },
+      body: SafeArea(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Center(
+              child: FractionallySizedBox(
+                widthFactor: 0.6, // Responsive width (60% of screen)
+                heightFactor: 0.6, // Responsive height (60% of screen)
+                child: Image.asset(
+                  'assets/images/logo_transparent.png',
+                  fit: BoxFit.contain, // Ensure logo scales properly
+                ),
               ),
             ),
-          ),
-        ],
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom:
+                  MediaQuery.of(context).size.height *
+                  0.05, // Responsive bottom padding
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal:
+                      MediaQuery.of(context).size.width *
+                      0.1, // Responsive padding
+                ),
+                child: AnimatedBuilder(
+                  animation: _progressAnimation,
+                  builder: (context, child) {
+                    return LinearProgressIndicator(
+                      value: _progressAnimation.value,
+                      backgroundColor: Colors.white24,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.blue,
+                      ),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(10),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

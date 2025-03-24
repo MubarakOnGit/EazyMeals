@@ -7,8 +7,10 @@ import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key}); // Add const constructor
+
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -32,17 +34,18 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     try {
-      final UserCredential userCredential = await _auth
-          .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-      if (!userCredential.user!.emailVerified) {
-        await _handleUnverifiedUser(userCredential.user!);
+      final user = userCredential.user!;
+      if (!user.emailVerified) {
+        await _handleUnverifiedUser(user);
         return;
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showGlassSnackBar(
         context: context,
@@ -56,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
         (Route<dynamic> route) => false,
       );
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       String message = e.message ?? 'Invalid email or password';
 
@@ -72,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
         type: 'error',
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -83,12 +87,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (updatedUser != null && !updatedUser.emailVerified) {
         await updatedUser.sendEmailVerification();
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => VerificationScreen()),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       showGlassSnackBar(
         context: context,
         title: 'Verification Error',
@@ -99,64 +105,91 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/images/logo_crop.png',
-                height: 100,
-                width: 100,
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Welcome Back!',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: headTextColor,
-                  letterSpacing: 0.5,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal:
+                  MediaQuery.of(context).size.width * 0.1, // Responsive padding
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/images/logo_crop.png',
+                  height:
+                      MediaQuery.of(context).size.height *
+                      0.15, // Responsive height
+                  width:
+                      MediaQuery.of(context).size.width *
+                      0.25, // Responsive width
+                  fit: BoxFit.contain,
                 ),
-              ),
-              SizedBox(height: 40),
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    _buildEmailField(),
-                    SizedBox(height: 20),
-                    _buildPasswordField(),
-                    SizedBox(height: 15),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ForgotPasswordScreen(),
-                            ),
-                          );
-                        },
-                        child: Text(
-                          'Forgot Password?',
-                          style: TextStyle(color: Colors.blue[900]),
+                SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+                Text(
+                  'Welcome Back!',
+                  style: TextStyle(
+                    fontSize:
+                        MediaQuery.of(context).size.width *
+                        0.08, // Responsive font
+                    fontWeight: FontWeight.w800,
+                    color: headTextColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      _buildEmailField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.025,
+                      ),
+                      _buildPasswordField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.02,
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ForgotPasswordScreen(),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(color: Colors.blue[900]),
+                          ),
                         ),
                       ),
-                    ),
-                    SizedBox(height: 30),
-                    _buildLoginButton(),
-                    SizedBox(height: 25),
-                    _buildSignupPrompt(),
-                  ],
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.04,
+                      ),
+                      _buildLoginButton(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.03,
+                      ),
+                      _buildSignupPrompt(),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -169,11 +202,11 @@ class _LoginScreenState extends State<LoginScreen> {
       keyboardType: TextInputType.emailAddress,
       decoration: InputDecoration(
         labelText: 'Email',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
@@ -181,10 +214,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your email';
         if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
@@ -201,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
       obscureText: _obscurePassword,
       decoration: InputDecoration(
         labelText: 'Password',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.lock, color: Colors.blue[900]),
         suffixIcon: IconButton(
           icon: Icon(
@@ -217,10 +250,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
         if (value == null || value.isEmpty) return 'Please enter your password';
         if (value.length < 6) return 'Password must be at least 6 characters';
@@ -236,19 +269,29 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: _isLoading ? null : _signInWithEmailAndPassword,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue[900],
-          padding: EdgeInsets.symmetric(vertical: 15),
+          padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
           ),
         ),
-        child: Text(
-          'Login',
-          style: TextStyle(
-            fontSize: 18,
-            color: buttonTextColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child:
+            _isLoading
+                ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    color: buttonTextColor,
+                    strokeWidth: 2,
+                  ),
+                )
+                : const Text(
+                  'Login',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: buttonTextColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
       ),
     );
   }
@@ -259,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Text(
           "Don't have an account? ",
-          style: TextStyle(color: subHeadTextColor),
+          style: const TextStyle(color: subHeadTextColor),
         ),
         TextButton(
           onPressed: () {

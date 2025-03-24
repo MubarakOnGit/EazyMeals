@@ -8,8 +8,10 @@ import 'VerificationScreen.dart';
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+
   @override
-  _SignUpScreenState createState() => _SignUpScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
@@ -26,7 +28,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> _signUp() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     if (!_agreeToTerms) {
       showGlassSnackBar(
@@ -47,22 +51,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
 
     try {
-      final UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-      await userCredential.user!.sendEmailVerification();
+      final user = userCredential.user!;
+      await user.sendEmailVerification();
 
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+      await _firestore.collection('users').doc(user.uid).set({
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'createdAt': Timestamp.now(),
+        'createdAt': FieldValue.serverTimestamp(),
         'isVerified': false,
       });
 
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showGlassSnackBar(
         context: context,
@@ -76,11 +83,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
         MaterialPageRoute(builder: (context) => VerificationScreen()),
       );
     } on FirebaseAuthException catch (e) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       String message = e.message ?? 'An error occurred';
 
       if (e.code == 'email-already-in-use') {
-        message = await _handleExistingAccount(_emailController.text.trim());
+        message =
+            'This email is already in use. Please log in or use a different email.';
       }
 
       showGlassSnackBar(
@@ -90,6 +101,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         type: 'error',
       );
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showGlassSnackBar(
         context: context,
@@ -104,138 +118,72 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  Future<String> _handleExistingAccount(String email) async {
-    try {
-      final methods = await _auth.fetchSignInMethodsForEmail(email);
-
-      if (methods.contains('password')) {
-        final tempUser = await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: _passwordController.text.trim(),
-        );
-
-        if (!tempUser.user!.emailVerified) {
-          await tempUser.user!.sendEmailVerification();
-          await _auth.signOut();
-          return 'Verification email resent. Please check your inbox.';
-        }
-        return 'Account already exists. Please login instead.';
-      }
-      return 'Account exists with different sign-in method.';
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'wrong-password') {
-        return 'Account exists with different credentials.';
-      }
-      return 'Account verification failed. Please try again.';
-    } catch (e) {
-      return 'Could not verify existing account.';
-    }
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Create Account',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: headTextColor,
-                  letterSpacing: 0.5,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width * 0.1,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Create Account',
+                  style: TextStyle(
+                    fontSize: MediaQuery.of(context).size.width * 0.08,
+                    fontWeight: FontWeight.w800,
+                    color: headTextColor,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              ),
-              SizedBox(height: 40),
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    _buildNameField(),
-                    SizedBox(height: 20),
-                    _buildEmailField(),
-                    SizedBox(height: 20),
-                    _buildPhoneField(),
-                    SizedBox(height: 20),
-                    _buildPasswordField(),
-                    SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _agreeToTerms,
-                          onChanged: (value) {
-                            setState(() => _agreeToTerms = value ?? false);
-                          },
-                          activeColor: Colors.blue[900],
-                          checkColor: Colors.white,
-                        ),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: subHeadTextColor,
-                              ),
-                              children: [
-                                TextSpan(text: 'I agree to the '),
-                                TextSpan(
-                                  text: 'Privacy Policy',
-                                  style: TextStyle(
-                                    color: Colors.blue[900],
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                  recognizer:
-                                      TapGestureRecognizer()
-                                        ..onTap = () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder:
-                                                  (context) =>
-                                                      PrivacyPolicyScreen(),
-                                            ),
-                                          );
-                                        },
-                                ),
-                                TextSpan(text: ' & '),
-                                TextSpan(
-                                  text: 'Terms of Use',
-                                  style: TextStyle(
-                                    color: Colors.blue[900],
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                  recognizer:
-                                      TapGestureRecognizer()
-                                        ..onTap = () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder:
-                                                  (context) =>
-                                                      TermsOfUseScreen(),
-                                            ),
-                                          );
-                                        },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 30),
-                    _buildSignUpButton(),
-                    SizedBox(height: 25),
-                    _buildLoginPrompt(),
-                  ],
+                SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      _buildNameField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.025,
+                      ),
+                      _buildEmailField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.025,
+                      ),
+                      _buildPhoneField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.025,
+                      ),
+                      _buildPasswordField(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.025,
+                      ),
+                      _buildTermsCheckbox(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.04,
+                      ),
+                      _buildSignUpButton(),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.03,
+                      ),
+                      _buildLoginPrompt(),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -247,11 +195,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       controller: _nameController,
       decoration: InputDecoration(
         labelText: 'Full Name',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
@@ -259,12 +207,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
-        if (value == null || value.isEmpty) return 'Please enter your name';
+        if (value == null || value.trim().isEmpty) {
+          return 'Please enter your name';
+        }
         return null;
       },
     );
@@ -276,11 +226,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       keyboardType: TextInputType.emailAddress,
       decoration: InputDecoration(
         labelText: 'Email',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
@@ -288,12 +238,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
-        if (value == null || value.isEmpty) return 'Please enter your email';
+        if (value == null || value.trim().isEmpty) {
+          return 'Please enter your email';
+        }
         if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
           return 'Please enter a valid email';
         }
@@ -308,11 +260,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       keyboardType: TextInputType.phone,
       decoration: InputDecoration(
         labelText: 'Phone Number',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.phone, color: Colors.blue[900]),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
@@ -320,16 +272,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if (value == null || value.trim().isEmpty) {
           return 'Please enter your phone number';
         }
         if (!RegExp(r'^[0-9]{9}$').hasMatch(value)) {
-          return 'Please enter a valid 9-digit Georgian phone number';
+          return 'Please enter a valid 9-digit phone number';
         }
         return null;
       },
@@ -342,7 +294,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       obscureText: _obscurePassword,
       decoration: InputDecoration(
         labelText: 'Password',
-        labelStyle: TextStyle(color: Colors.grey),
+        labelStyle: const TextStyle(color: Colors.grey),
         prefixIcon: Icon(Icons.lock, color: Colors.blue[900]),
         suffixIcon: IconButton(
           icon: Icon(
@@ -358,35 +310,98 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
       ),
-      style: TextStyle(color: subHeadTextColor),
+      style: const TextStyle(color: subHeadTextColor),
       validator: (value) {
-        if (value == null || value.isEmpty) return 'Please enter your password';
-        if (value.length < 6) return 'Password must be at least 6 characters';
+        if (value == null || value.trim().isEmpty) {
+          return 'Please enter your password';
+        }
+        if (value.length < 6) {
+          return 'Password must be at least 6 characters';
+        }
         return null;
       },
     );
   }
 
+  Widget _buildTermsCheckbox() {
+    return Row(
+      crossAxisAlignment:
+          CrossAxisAlignment.center, // Align items vertically centered
+      children: [
+        Checkbox(
+          value: _agreeToTerms,
+          onChanged: (value) => setState(() => _agreeToTerms = value ?? false),
+          activeColor: Colors.blue[900],
+          checkColor: Colors.white,
+        ),
+        Flexible(
+          // Use Flexible instead of Expanded to prevent overflow
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 14, color: subHeadTextColor),
+              children: [
+                const TextSpan(text: 'I agree to the '),
+                TextSpan(
+                  text: 'Privacy Policy',
+                  style: TextStyle(
+                    color: Colors.blue[900],
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer:
+                      TapGestureRecognizer()
+                        ..onTap = () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PrivacyPolicyScreen(),
+                            ),
+                          );
+                        },
+                ),
+                const TextSpan(text: ' & '),
+                TextSpan(
+                  text: 'Terms of Use',
+                  style: TextStyle(
+                    color: Colors.blue[900],
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer:
+                      TapGestureRecognizer()
+                        ..onTap = () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const TermsOfUseScreen(),
+                            ),
+                          );
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSignUpButton() {
     return SizedBox(
-      width: double.infinity, // Matches login button width
+      width: double.infinity,
       child: ElevatedButton(
-        onPressed: _agreeToTerms ? (_isLoading ? null : _signUp) : null,
+        onPressed: _agreeToTerms && !_isLoading ? _signUp : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: _agreeToTerms ? Colors.blue[900] : Colors.grey,
-          padding: EdgeInsets.symmetric(
-            vertical: 15,
-          ), // Matches login button height
+          padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
-          ), // Matches login button radius
+          ),
         ),
         child:
             _isLoading
-                ? SizedBox(
+                ? const SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
@@ -394,7 +409,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     strokeWidth: 2,
                   ),
                 )
-                : Text(
+                : const Text(
                   'Sign Up',
                   style: TextStyle(
                     fontSize: 18,
@@ -410,16 +425,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          "Already have an account? ",
+        const Text(
+          'Already have an account? ',
           style: TextStyle(color: subHeadTextColor),
         ),
         TextButton(
-          onPressed:
-              () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => LoginScreen()),
-              ),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          },
           child: Text(
             'Login',
             style: TextStyle(
@@ -433,8 +449,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// New Privacy Policy Screen
 class PrivacyPolicyScreen extends StatelessWidget {
+  const PrivacyPolicyScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -446,35 +463,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back, color: appbarIconColor),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
+        title: const Text(
           'Privacy Policy',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: headTextColor, fontWeight: FontWeight.bold),
         ),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Privacy Policy',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: MediaQuery.of(context).size.width * 0.06,
                 fontWeight: FontWeight.bold,
                 color: headTextColor,
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
             Text(
-              'This is the Terms of Use for the Eazy Meals app:\n\n'
-              '1. Acceptance: By using the Eazy Meals app, you agree to follow these terms and conditions.\n\n'
-              '2. Eligibility: You must be at least 18 years old to use this service.\n\n'
-              '3. Account Responsibility: You are responsible for keeping your login credentials secure and confidential.\n\n'
-              '4. Service Area: Eazy Meals operates only within the Tbilisi city area. Orders placed outside this area may not be fulfilled.\n\n'
-              '5. Prohibited Actions: You may not use the service for illegal activities or to interfere with the experience of other users.\n\n'
-              '6. Refunds: Refunds are issued only on legitimate grounds when the mistake is on our side (e.g., wrong delivery or missing items).\n\n'
-              '7. Termination: We reserve the right to suspend or terminate your account if these terms are violated.',
-              style: TextStyle(
+              'This is the Privacy Policy for the Eazy Meals app:\n\n'
+              '1. Data Collection: We collect your name, email, phone number, and location to provide our meal delivery service.\n\n'
+              '2. Student Data Collection: We collect age, gender, admission year, course, and university ID details for student verification.\n\n'
+              '3. Usage: Your information is used only to create your account, confirm your orders, and deliver your meals.\n\n'
+              '4. Security: We take reasonable steps to protect your personal data from unauthorized access.\n\n'
+              '5. Sharing: We do not share your personal information with third parties without your consent, unless required by law.\n\n'
+              '6. Updates: Our privacy policy may change over time. You will be notified of any important updates.',
+              style: const TextStyle(
                 fontSize: 16,
                 color: subHeadTextColor,
                 height: 1.5,
@@ -487,8 +503,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
   }
 }
 
-// New Terms of Use Screen
 class TermsOfUseScreen extends StatelessWidget {
+  const TermsOfUseScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -500,34 +517,35 @@ class TermsOfUseScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back, color: appbarIconColor),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
+        title: const Text(
           'Terms of Use',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: headTextColor, fontWeight: FontWeight.bold),
         ),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Terms of Use',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: MediaQuery.of(context).size.width * 0.06,
                 fontWeight: FontWeight.bold,
                 color: headTextColor,
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
             Text(
-              'This is the Privacy Policy for the Eazy Meals app:\n\n'
-              '1. Data Collection: We collect your name, email, phone number, and location to provide our meal delivery service.\n\n'
-              '2. Student Data Collection: We collect age , gender , admission year , course and university id details for student verification\n\n'
-              '2. Usage: Your information is used only to create your account, confirm your orders, and deliver your meals.\n\n'
-              '3. Security: We take reasonable steps to protect your personal data from unauthorized access.\n\n'
-              '4. Sharing: We do not share your personal information with third parties without your consent, unless required by law.\n\n'
-              '5. Updates: Our privacy policy may change over time. You will be notified of any important updates.',
-              style: TextStyle(
+              'This is the Terms of Use for the Eazy Meals app:\n\n'
+              '1. Acceptance: By using the Eazy Meals app, you agree to follow these terms and conditions.\n\n'
+              '2. Eligibility: You must be at least 18 years old to use this service.\n\n'
+              '3. Account Responsibility: You are responsible for keeping your login credentials secure and confidential.\n\n'
+              '4. Service Area: Eazy Meals operates only within the Tbilisi city area. Orders placed outside this area may not be fulfilled.\n\n'
+              '5. Prohibited Actions: You may not use the service for illegal activities or to interfere with the experience of other users.\n\n'
+              '6. Refunds: Refunds are issued only on legitimate grounds when the mistake is on our side (e.g., wrong delivery or missing items).\n\n'
+              '7. Termination: We reserve the right to suspend or terminate your account if these terms are violated.',
+              style: const TextStyle(
                 fontSize: 16,
                 color: subHeadTextColor,
                 height: 1.5,

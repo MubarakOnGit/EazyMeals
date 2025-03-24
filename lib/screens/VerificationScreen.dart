@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/theme.dart';
 import '../widgets/GlassSnackBar.dart';
-import 'CongratulationsScreen.dart';
+import 'congratulations_screen.dart';
 
 class VerificationScreen extends StatefulWidget {
   @override
@@ -75,9 +75,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
           context: context,
           title: 'Verification Check Failed',
           message:
-          e.code == 'network-request-failed'
-              ? 'Internet connection required'
-              : 'Please try again later',
+              e.code == 'network-request-failed'
+                  ? 'Internet connection required'
+                  : 'Please try again later',
           type: 'error',
         );
       }
@@ -161,22 +161,22 @@ class _VerificationScreenState extends State<VerificationScreen> {
               TextButton(
                 onPressed: _isResending ? null : _resendVerificationEmail,
                 child:
-                _isResending
-                    ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.blue[900], // Blue[900] for progress
-                    strokeWidth: 2,
-                  ),
-                )
-                    : Text(
-                  'Resend Verification Email',
-                  style: TextStyle(
-                    color: Colors.blue[900], // Blue[900] for text
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                    _isResending
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.blue[900], // Blue[900] for progress
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Text(
+                          'Resend Verification Email',
+                          style: TextStyle(
+                            color: Colors.blue[900], // Blue[900] for text
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
               ),
             ],
           ),

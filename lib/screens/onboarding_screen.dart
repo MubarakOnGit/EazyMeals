@@ -10,8 +10,10 @@ const Color buttonColor = Colors.blue;
 const Color buttonTextColor = Colors.white;
 
 class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
+
   @override
-  _OnboardingScreenState createState() => _OnboardingScreenState();
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen>
@@ -22,7 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  final List<Map<String, String>> onboardingData = [
+  final List<Map<String, String>> onboardingData = const [
     {
       "title": "Quality Food",
       "subtitle":
@@ -48,7 +50,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1000),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
@@ -75,11 +77,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void _nextPage() {
     if (_currentPage < onboardingData.length - 1) {
       _pageController.nextPage(
-        duration: Duration(milliseconds: 400),
+        duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.pushReplacementNamed(context, '/login');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     }
   }
 
@@ -92,11 +96,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       backgroundColor: backgroundColor,
       body: Stack(
         children: [
-          // Background gradient for subtle depth
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.blue.shade50.withOpacity(0.3), backgroundColor],
+                colors: [
+                  Colors.blue.shade50.withAlpha(76),
+                  backgroundColor,
+                ], // 0.3 opacity = ~76/255
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -110,26 +116,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     controller: _pageController,
                     onPageChanged: _onPageChanged,
                     itemCount: onboardingData.length,
-                    itemBuilder: (context, index) {
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SingleOnboardingScreen(
-                          title: onboardingData[index]["title"]!,
-                          subtitle: onboardingData[index]["subtitle"]!,
-                          image: onboardingData[index]["image"]!,
-                          textColor: textColor,
-                          subtitleColor: subtitleColor,
+                    itemBuilder:
+                        (context, index) => FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: SingleOnboardingScreen(
+                            title: onboardingData[index]["title"]!,
+                            subtitle: onboardingData[index]["subtitle"]!,
+                            image: onboardingData[index]["image"]!,
+                            textColor: textColor,
+                            subtitleColor: subtitleColor,
+                          ),
                         ),
-                      );
-                    },
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
                   child: _buildPageIndicators(),
                 ),
                 Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 40),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
                   child: _buildNextButton(),
                 ),
               ],
@@ -140,15 +145,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // Page indicators with animation
   Widget _buildPageIndicators() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
         onboardingData.length,
         (index) => AnimatedContainer(
-          duration: Duration(milliseconds: 300),
-          margin: EdgeInsets.symmetric(horizontal: 6),
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.symmetric(horizontal: 6),
           width: _currentPage == index ? 24 : 10,
           height: 10,
           decoration: BoxDecoration(
@@ -165,9 +169,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 _currentPage == index
                     ? [
                       BoxShadow(
-                        color: Colors.blue.withOpacity(0.3),
+                        color: Colors.blue.withAlpha(
+                          76,
+                        ), // 0.3 opacity = ~76/255
                         blurRadius: 6,
-                        offset: Offset(0, 3),
+                        offset: const Offset(0, 3),
                       ),
                     ]
                     : null,
@@ -177,15 +183,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // Next/Get Started button with animation
   Widget _buildNextButton() {
     return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 300),
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _nextPage,
         style: ElevatedButton.styleFrom(
-          padding: EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 18),
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
@@ -202,19 +207,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.blue.withOpacity(0.4),
+                color: Colors.blue.withAlpha(102), // 0.4 opacity = ~102/255
                 blurRadius: 12,
-                offset: Offset(0, 6),
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-          padding: EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 18),
           child: Center(
             child: Text(
               _currentPage == onboardingData.length - 1
                   ? "Get Started"
                   : "Next",
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: buttonTextColor,
@@ -236,6 +241,7 @@ class SingleOnboardingScreen extends StatelessWidget {
   final Color subtitleColor;
 
   const SingleOnboardingScreen({
+    super.key,
     required this.title,
     required this.subtitle,
     required this.image,
@@ -249,55 +255,55 @@ class SingleOnboardingScreen extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(height: 60),
+          SizedBox(height: screenHeight * 0.08),
           Stack(
             alignment: Alignment.center,
             children: [
-              Container(
+              SizedBox(
                 height: screenHeight * 0.4,
                 width: screenWidth * 0.8,
                 child: CustomPaint(painter: AmoebaPainter()),
               ),
-              Container(
+              SizedBox(
                 height: screenHeight * 0.35,
                 child: Lottie.asset(image, fit: BoxFit.contain, repeat: true),
               ),
             ],
           ),
-          SizedBox(height: 40),
+          SizedBox(height: screenHeight * 0.05),
           Text(
             title,
             style: TextStyle(
-              fontSize: 30,
+              fontSize: screenWidth * 0.08,
               fontWeight: FontWeight.w700,
               color: textColor,
               letterSpacing: 0.8,
               shadows: [
                 Shadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withAlpha(26), // 0.1 opacity = ~26/255
                   blurRadius: 4,
-                  offset: Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 20),
+          SizedBox(height: screenHeight * 0.03),
           Text(
             subtitle,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: screenWidth * 0.04,
               color: subtitleColor,
               fontWeight: FontWeight.w400,
               height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
-          Spacer(),
+          const Spacer(),
         ],
       ),
     );
@@ -311,8 +317,8 @@ class AmoebaPainter extends CustomPainter {
         Paint()
           ..shader = LinearGradient(
             colors: [
-              Colors.blue.shade900.withOpacity(0.4),
-              Colors.purple.shade700.withOpacity(0.4),
+              Colors.blue.shade900.withAlpha(102), // 0.4 opacity = ~102/255
+              Colors.purple.shade700.withAlpha(102), // 0.4 opacity = ~102/255
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -323,33 +329,32 @@ class AmoebaPainter extends CustomPainter {
     final random = Random();
     const points = 12;
 
-    List<Offset> controlPoints = [];
-    for (int i = 0; i < points; i++) {
-      double angle = (2 * pi / points) * i;
-      double radius =
+    final controlPoints = List.generate(points, (i) {
+      final angle = (2 * pi / points) * i;
+      final radius =
           (size.width * 0.4) + (random.nextDouble() * size.width * 0.1);
-      double x = size.width * 0.5 + radius * cos(angle);
-      double y = size.height * 0.5 + radius * sin(angle);
-      controlPoints.add(Offset(x, y));
-    }
+      final x = size.width * 0.5 + radius * cos(angle);
+      final y = size.height * 0.5 + radius * sin(angle);
+      return Offset(x, y);
+    });
 
     path.moveTo(controlPoints[0].dx, controlPoints[0].dy);
 
-    for (int i = 0; i < controlPoints.length; i++) {
-      int nextIndex = (i + 1) % controlPoints.length;
-      int prevIndex = (i - 1 + controlPoints.length) % controlPoints.length;
+    for (var i = 0; i < controlPoints.length; i++) {
+      final nextIndex = (i + 1) % controlPoints.length;
+      final prevIndex = (i - 1 + controlPoints.length) % controlPoints.length;
 
-      Offset midPoint = Offset(
+      final midPoint = Offset(
         (controlPoints[i].dx + controlPoints[nextIndex].dx) / 2,
         (controlPoints[i].dy + controlPoints[nextIndex].dy) / 2,
       );
 
-      Offset control1 = Offset(
+      final control1 = Offset(
         controlPoints[i].dx + (midPoint.dx - controlPoints[prevIndex].dx) * 0.3,
         controlPoints[i].dy + (midPoint.dy - controlPoints[prevIndex].dy) * 0.3,
       );
 
-      Offset control2 = Offset(
+      final control2 = Offset(
         controlPoints[nextIndex].dx -
             (controlPoints[(nextIndex + 1) % controlPoints.length].dx -
                     midPoint.dx) *
@@ -371,7 +376,12 @@ class AmoebaPainter extends CustomPainter {
     }
     path.close();
 
-    canvas.drawShadow(path, Colors.black.withOpacity(0.2), 6.0, false);
+    canvas.drawShadow(
+      path,
+      Colors.black.withAlpha(51),
+      6.0,
+      false,
+    ); // 0.2 opacity = ~51/255
     canvas.drawPath(path, paint);
   }
 
