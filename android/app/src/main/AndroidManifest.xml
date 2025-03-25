@@ -8,10 +8,11 @@
     <!-- Declare camera as an optional feature -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Existing location permissions (kept as-is) -->
+    <!-- Location permissions for geolocator and google_maps_flutter -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Queries for intent handling -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
@@ -32,6 +33,11 @@
     <application
         android:label="EazyMeals"
         android:icon="@mipmap/ic_launcher">
+        <!-- Google Maps API key for google_maps_flutter -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBzdm3YVXiuaeBF7ZSTFjjUJtNeU9qa4Ac" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 
+// LocationDetails class (unchanged)
 class LocationDetails {
   final double latitude;
   final double longitude;
@@ -56,6 +58,264 @@ class LocationDetails {
     city: map['city'] ?? '',
     country: map['country'] ?? '',
   );
+}
+
+// Custom Map Screen with Search Bar
+class CustomMapScreen extends StatefulWidget {
+  const CustomMapScreen({super.key});
+
+  @override
+  _CustomMapScreenState createState() => _CustomMapScreenState();
+}
+
+class _CustomMapScreenState extends State<CustomMapScreen> {
+  GoogleMapController? _mapController;
+  LatLng? _pinnedLocation;
+  LatLng? _currentLocation;
+  bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+  static const String _placesApiKey = 'AIzaSyCawmUZBXo9Yonr5bXFxFzXXb_jFwlXWuA';
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location services are disabled.')),
+      );
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied.')),
+        );
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location permissions are permanently denied.'),
+        ),
+      );
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
+      _isLoading = false;
+    });
+
+    _mapController?.animateCamera(CameraUpdate.newLatLng(_currentLocation!));
+  }
+
+  Future<LocationDetails> _getAddressFromCoordinates(
+    double lat,
+    double lng,
+  ) async {
+    const url =
+        'https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&accept-language=en';
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$url&lat=$lat&lon=$lng'),
+            headers: {'User-Agent': 'AddressManager/1.0'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final address = data['address'];
+        return LocationDetails(
+          latitude: lat,
+          longitude: lng,
+          address: data['display_name'] ?? '$lat, $lng',
+          street: address['road'] ?? address['street'] ?? '',
+          city: address['city'] ?? address['town'] ?? address['village'] ?? '',
+          country: address['country'] ?? '',
+        );
+      }
+      throw Exception('Failed to fetch address details');
+    } catch (e) {
+      return LocationDetails(
+        latitude: lat,
+        longitude: lng,
+        address: '$lat, $lng',
+        street: '',
+        city: '',
+        country: '',
+      );
+    }
+  }
+
+  void _onMapTapped(LatLng position) {
+    setState(() {
+      _pinnedLocation = position;
+    });
+  }
+
+  void _saveLocation() async {
+    if (_pinnedLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pin a location first.')),
+      );
+      return;
+    }
+
+    try {
+      final locationDetails = await _getAddressFromCoordinates(
+        _pinnedLocation!.latitude,
+        _pinnedLocation!.longitude,
+      );
+      Navigator.pop(context, locationDetails);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save location: $e')));
+    }
+  }
+
+  Future<void> _searchLocation(String query) async {
+    if (query.isEmpty) return;
+
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/place/textsearch/json'
+      '?query=${Uri.encodeQueryComponent(query)}'
+      '&language=en'
+      '&key=$_placesApiKey',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final result = data['results'][0];
+          final lat = result['geometry']['location']['lat'];
+          final lng = result['geometry']['location']['lng'];
+
+          setState(() {
+            _pinnedLocation = LatLng(lat, lng);
+          });
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLng(_pinnedLocation!),
+          );
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('No results found.')));
+        }
+      } else {
+        throw Exception(
+          'Failed to fetch search results: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Search failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pin Your Location'),
+        backgroundColor: Colors.blue[900],
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.save,
+              color: _pinnedLocation != null ? Colors.greenAccent : Colors.grey,
+            ),
+            onPressed: _saveLocation,
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : GoogleMap(
+                onMapCreated: (controller) => _mapController = controller,
+                initialCameraPosition: CameraPosition(
+                  target: _currentLocation ?? const LatLng(0, 0),
+                  zoom: 15,
+                ),
+                myLocationEnabled: true,
+                myLocationButtonEnabled: true,
+                onTap: _onMapTapped,
+                markers:
+                    _pinnedLocation != null
+                        ? {
+                          Marker(
+                            markerId: const MarkerId('pinned'),
+                            position: _pinnedLocation!,
+                            infoWindow: const InfoWindow(
+                              title: 'Pinned Location',
+                            ),
+                          ),
+                        }
+                        : {},
+              ),
+          Positioned(
+            top: 10,
+            left: 15,
+            right: 15,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.5),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search location...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 10,
+                  ),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.search),
+                    onPressed: () => _searchLocation(_searchController.text),
+                  ),
+                ),
+                onSubmitted: _searchLocation,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class AddressManagementScreen extends StatefulWidget {
@@ -154,12 +414,8 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     double lat,
     double lng,
   ) async {
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      throw Exception('Invalid coordinates');
-    }
-
     const url =
-        'https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1';
+        'https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&accept-language=en';
     try {
       final response = await http
           .get(
@@ -305,117 +561,18 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     }
   }
 
-  Future<void> _addAddressFromGoogleMaps() async {
-    final coordsController = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            backgroundColor: Colors.white,
-            title: Text(
-              'Add from Google Maps',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.blue[900],
-              ),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Follow these steps:',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '1. Open Google Maps',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  Text(
-                    '2. Pin your location',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  Text(
-                    '3. Copy coordinates (e.g., 11.201561, 76.336183)',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  Text(
-                    '4. Paste below',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(
-                    coordsController,
-                    'Coordinates (lat,lng)',
-                    'e.g., 11.201561, 76.336183',
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed:
-                    () async => await launchUrl(
-                      Uri.parse('https://www.google.com/maps'),
-                    ),
-                child: Text(
-                  'Open Maps',
-                  style: TextStyle(color: Colors.blue[900]),
-                ),
-              ),
-              TextButton(
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.blue[900]),
-                ),
-                onPressed: () => Navigator.pop(context, false),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[900],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Add', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
+  Future<void> _addAddressFromMap() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CustomMapScreen()),
     );
 
-    if (result == true && mounted) {
-      final coords = coordsController.text.trim();
-      if (coords.isEmpty) {
-        _showErrorSnackBar('Please enter coordinates');
-        return;
-      }
-
-      try {
-        final latLng = coords.split(',');
-        if (latLng.length != 2) throw Exception('Invalid coordinate format');
-
-        final latitude = double.parse(latLng[0].trim());
-        final longitude = double.parse(latLng[1].trim());
-        final newLocation = await _getAddressFromCoordinates(
-          latitude,
-          longitude,
-        );
-
-        setState(() {
-          _addresses.add(newLocation);
-          _activeAddress ??= newLocation;
-        });
-        await _updateAddressesInFirestore();
-      } catch (e) {
-        _showErrorSnackBar('Failed to process coordinates: $e');
-      }
+    if (result != null && result is LocationDetails && mounted) {
+      setState(() {
+        _addresses.add(result);
+        _activeAddress ??= result;
+      });
+      await _updateAddressesInFirestore();
     }
   }
 
@@ -491,10 +648,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Colors.blue[900]!.withAlpha(13),
-                  Colors.grey[100]!,
-                ], // 0.05 -> 13
+                colors: [Colors.blue[900]!.withAlpha(13), Colors.grey[100]!],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -629,11 +783,12 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: Colors.blue[900],
+                    foregroundColor: Colors.blue[700],
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 8,
-                    shadowColor: Colors.blue.withAlpha(77), // 0.3 -> 77
+                    shadowColor: Colors.blue.withAlpha(77),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -655,15 +810,16 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _addAddressFromGoogleMaps,
+                  onPressed: _addAddressFromMap,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: Colors.blue[900],
+                    foregroundColor: Colors.blue[700],
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 8,
-                    shadowColor: Colors.blue.withAlpha(77), // 0.3 -> 77
+                    shadowColor: Colors.blue.withAlpha(77),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -671,7 +827,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                       Icon(Icons.map, color: Colors.white, size: 20),
                       SizedBox(width: 8),
                       Text(
-                        'From Google Maps',
+                        'Pin on Map',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -711,7 +867,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.2 -> 51
+        ],
       ),
       child: Row(
         children: [
@@ -721,7 +877,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
               color:
                   isActive
                       ? Colors.white.withAlpha(26)
-                      : Colors.blue[900]!.withAlpha(26), // 0.1 -> 26
+                      : Colors.blue[900]!.withAlpha(26),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -798,4 +954,8 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
       ),
     );
   }
+}
+
+void main() {
+  runApp(const MaterialApp(home: AddressManagementScreen()));
 }
