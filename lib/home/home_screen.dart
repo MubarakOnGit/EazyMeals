@@ -24,8 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OrderController orderController = Get.find<OrderController>();
-  final PausePlayController pausePlayController =
-  Get.find<PausePlayController>();
+  final PausePlayController pausePlayController = Get.find<PausePlayController>();
   final TextEditingController _searchController = TextEditingController();
   String userName = 'User';
   File? _profileImage;
@@ -97,9 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
             orderController.updateOrderStatus('No Order');
           }
         },
-        onError: (e) {
-          print('Order listener error: $e'); // Debug log
-        },
+        onError: (e) => print('Order listener error: $e'),
       );
     }
   }
@@ -114,36 +111,29 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             userName = data['name'] ?? 'User';
             isSubscribed = data['activeSubscription'] ?? false;
-            isStudentVerified =
-            data.containsKey('studentDetails')
+            isStudentVerified = data.containsKey('studentDetails')
                 ? (data['studentDetails']['isVerified'] ?? false)
                 : false;
-            activeAddress =
-            data['activeAddress'] != null
+            activeAddress = data['activeAddress'] != null
                 ? (data['activeAddress'] is String
                 ? data['activeAddress'] as String
-                : LocationDetails.fromMap(
-              data['activeAddress'] as Map<String, dynamic>,
-            ).toString())
+                : LocationDetails.fromMap(data['activeAddress'] as Map<String, dynamic>).toString())
                 : null;
             if (isSubscribed && data['subscriptionPlan'] != null) {
               final plan = data['subscriptionPlan'] as String;
               final createdAt = data['createdAt'] as Timestamp?;
               if (createdAt != null) {
                 final startDate = createdAt.toDate();
-                final days =
-                plan == '1 Week'
-                    ? 7
-                    : plan == '3 Weeks'
-                    ? 21
-                    : 28;
+                final days = plan == '1 Week' ? 7 : plan == '3 Weeks' ? 21 : 28;
                 subscriptionEndDate = startDate.add(Duration(days: days));
+                pausePlayController.subscriptionEndDate.value = subscriptionEndDate;
               }
             }
+            print('Loaded user data: isSubscribed=$isSubscribed, subEndDate=$subscriptionEndDate');
           });
         }
       } catch (e) {
-        print('Error loading user data: $e'); // Debug log
+        print('Error loading user data: $e');
       }
       _initializeItems();
     }
@@ -158,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _profileImage = file);
       }
     } catch (e) {
-      print('Error loading profile image: $e'); // Debug log
+      print('Error loading profile image: $e');
     }
   }
 
@@ -167,8 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final hour = now.hour;
     if (mounted) {
       setState(() {
-        greeting =
-        hour >= 5 && hour < 12
+        greeting = hour >= 5 && hour < 12
             ? 'Good Morning'
             : hour >= 12 && hour < 17
             ? 'Good Afternoon'
@@ -180,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToScreen(String title) {
-    print('Navigating to: $title'); // Debug log
+    print('Navigating to: $title');
     switch (title) {
       case 'Student Verification':
         if (!isStudentVerified) {
@@ -194,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _launchWhatsApp();
         break;
       default:
-        print('No navigation defined for: $title'); // Debug log
+        print('No navigation defined for: $title');
     }
   }
 
@@ -216,16 +205,13 @@ class _HomeScreenState extends State<HomeScreen> {
     allItems = [
       {
         'title': 'Pause & Play',
-        'description':
-        'Pause or resume your subscription anytime between 9 AM - 10 PM.',
+        'description': 'Pause or resume your subscription anytime between 9 AM - 10 PM.',
         'icon': Iconsax.play,
         'extraWidget': Obx(
               () => Switch(
             value: pausePlayController.isPaused.value,
-            onChanged:
-            isSubscribed
-                ? (value) =>
-                pausePlayController.togglePausePlay(isSubscribed)
+            onChanged: isSubscribed
+                ? (value) => pausePlayController.togglePausePlay(isSubscribed)
                 : null,
             activeColor: Colors.white.withOpacity(0.9),
             inactiveThumbColor: Colors.white,
@@ -285,8 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       },
       {
-        'title':
-        isSubscribed && subscriptionEndDate != null
+        'title': isSubscribed && subscriptionEndDate != null
             ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
             : 'No Plan Active',
         'subtitle': Text(
@@ -310,16 +295,11 @@ class _HomeScreenState extends State<HomeScreen> {
             alignment: Alignment.center,
             children: [
               CircularProgressIndicator(
-                value:
-                isSubscribed && subscriptionEndDate != null
-                    ? (subscriptionEndDate!
-                    .difference(DateTime.now())
-                    .inDays /
+                value: isSubscribed && subscriptionEndDate != null
+                    ? (subscriptionEndDate!.difference(DateTime.now()).inDays /
                     (subscriptionEndDate!
                         .difference(
-                      subscriptionEndDate!.subtract(
-                        const Duration(days: 28),
-                      ),
+                      subscriptionEndDate!.subtract(const Duration(days: 28)),
                     )
                         .inDays
                         .abs()))
@@ -401,13 +381,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _searchController.text.toLowerCase();
     if (mounted) {
       setState(() {
-        filteredItems =
-            allItems
-                .where(
-                  (item) =>
-                  (item['title'] as String).toLowerCase().contains(query),
-            )
-                .toList();
+        filteredItems = allItems
+            .where((item) => (item['title'] as String).toLowerCase().contains(query))
+            .toList();
       });
     }
   }
@@ -461,9 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       'Hi, $userName!',
                                       style: TextStyle(
                                         color: Colors.blue[900],
-                                        fontSize:
-                                        MediaQuery.of(context).size.width *
-                                            0.07,
+                                        fontSize: MediaQuery.of(context).size.width * 0.07,
                                         fontWeight: FontWeight.w700,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -478,8 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 greeting,
                                 style: TextStyle(
                                   color: Colors.blue[600],
-                                  fontSize:
-                                  MediaQuery.of(context).size.width * 0.04,
+                                  fontSize: MediaQuery.of(context).size.width * 0.04,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
@@ -493,10 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             duration: const Duration(milliseconds: 300),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.blue[200]!,
-                                width: 2,
-                              ),
+                              border: Border.all(color: Colors.blue[200]!, width: 2),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.blue.withAlpha(26),
@@ -508,13 +478,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: CircleAvatar(
                               radius: 24,
                               backgroundColor: Colors.white,
-                              backgroundImage:
-                              _profileImage != null
+                              backgroundImage: _profileImage != null
                                   ? FileImage(_profileImage!)
-                                  : const AssetImage(
-                                'assets/profile_pic.jpg',
-                              )
-                              as ImageProvider,
+                                  : const AssetImage('assets/profile_pic.jpg') as ImageProvider,
                             ),
                           ),
                         ),
@@ -535,20 +501,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search options...',
                     hintStyle: TextStyle(color: Colors.blue[400], fontSize: 16),
-                    prefixIcon: Icon(
-                      Iconsax.search_normal,
-                      color: Colors.blue[600],
-                      size: 20,
-                    ),
+                    prefixIcon: Icon(Iconsax.search_normal, color: Colors.blue[600], size: 20),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -558,17 +517,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(
-                        color: Colors.blue[100]!,
-                        width: 1,
-                      ),
+                      borderSide: BorderSide(color: Colors.blue[100]!, width: 1),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(
-                        color: Colors.blue[300]!,
-                        width: 1.5,
-                      ),
+                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                     ),
                   ),
                 ),
@@ -586,10 +539,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = filteredItems[index];
                   return GestureDetector(
-                    onTap:
-                    item['hasNavigation'] == true
-                        ? () => _navigateToScreen(item['title'] as String)
-                        : null,
+                    onTap: item['hasNavigation'] == true ? () => _navigateToScreen(item['title'] as String) : null,
                     child: FlipCard(
                       flipOnTouch: false,
                       direction: FlipDirection.HORIZONTAL,
@@ -597,9 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         duration: const Duration(milliseconds: 300),
                         child: Card(
                           elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           child: Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -616,16 +564,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         if (item['icon'] != null)
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: Colors.white.withAlpha(51),
-                                              borderRadius:
-                                              BorderRadius.circular(12),
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
                                             child: Icon(
                                               item['icon'] as IconData,
@@ -633,11 +579,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               size: 24,
                                             ),
                                           ),
-                                        if (item['extraWidget'] != null)
-                                          Flexible(
-                                            child:
-                                            item['extraWidget'] as Widget,
-                                          ),
+                                        if (item['extraWidget'] != null) Flexible(child: item['extraWidget'] as Widget),
                                       ],
                                     ),
                                     const SizedBox(height: 12),
@@ -698,9 +640,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       back: Card(
                         elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -746,8 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
 class LocationDetails {
   final String address;
   const LocationDetails(this.address);
-  factory LocationDetails.fromMap(Map<String, dynamic> map) =>
-      LocationDetails(map['address'] ?? '');
+  factory LocationDetails.fromMap(Map<String, dynamic> map) => LocationDetails(map['address'] ?? '');
   @override
   String toString() => address;
 }

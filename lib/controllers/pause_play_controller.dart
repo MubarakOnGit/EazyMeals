@@ -30,6 +30,7 @@ class PausePlayController extends GetxController {
               data['subscriptionEndDate'] != null
                   ? (data['subscriptionEndDate'] as Timestamp).toDate()
                   : null;
+          print('Pause state updated: isPaused=${isPaused.value}');
         }
       }, onError: (e) => print('Error listening to pause state: $e'));
     }
@@ -37,12 +38,21 @@ class PausePlayController extends GetxController {
 
   Future<void> togglePausePlay(bool isSubscribed) async {
     final user = _auth.currentUser;
-    if (user == null || !isSubscribed || subscriptionEndDate.value == null)
+    print('togglePausePlay called, isSubscribed: $isSubscribed');
+    if (user == null || !isSubscribed || subscriptionEndDate.value == null) {
+      print(
+        'Exiting early: user=$user, isSubscribed=$isSubscribed, subEndDate=${subscriptionEndDate.value}',
+      );
       return;
+    }
 
     final now = DateTime.now();
+    print('Current time: $now, Hour: ${now.hour}');
     if (now.hour >= 9 && now.hour < 22) {
       final newIsPaused = !isPaused.value;
+      print('Toggling to: $newIsPaused');
+      isPaused.value = newIsPaused; // Update local state immediately
+
       if (newIsPaused) {
         pauseStartTime.value = now;
       } else if (pauseStartTime.value != null) {
@@ -54,17 +64,20 @@ class PausePlayController extends GetxController {
       }
 
       try {
+        print('Updating Firestore with isPaused: $newIsPaused');
         await _firestore.collection('users').doc(user.uid).update({
           'isPaused': newIsPaused,
           'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
           'subscriptionEndDate': Timestamp.fromDate(subscriptionEndDate.value!),
         });
+        print('Firestore updated successfully');
         if (newIsPaused) {
           await markNextDayPaused(user.uid);
         } else {
           await resumeNextDay(user.uid);
         }
       } catch (e) {
+        isPaused.value = !newIsPaused; // Revert on error
         Get.snackbar('Error', 'Failed to update subscription status: $e');
         print('Toggle pause/play error: $e');
       }
