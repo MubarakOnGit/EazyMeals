@@ -5,8 +5,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
+import 'address_management_screen.dart';
+import 'student_verification_survey.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../controllers/order_status_controller.dart';
 import '../controllers/pause_play_controller.dart';
 
@@ -22,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OrderController orderController = Get.find<OrderController>();
   final PausePlayController pausePlayController =
-      Get.find<PausePlayController>();
+  Get.find<PausePlayController>();
   final TextEditingController _searchController = TextEditingController();
   String userName = 'User';
   File? _profileImage;
@@ -82,22 +85,22 @@ class _HomeScreenState extends State<HomeScreen> {
           .snapshots()
           .listen(
             (snapshot) {
-              if (snapshot.docs.isNotEmpty && mounted) {
-                final order = snapshot.docs.first.data();
-                final status = order['status'] ?? 'Pending Delivery';
-                orderController.updateOrderStatus(status);
-                if (status == 'Delivered') {
-                  _orderSubscription?.cancel();
-                  _orderSubscription = null;
-                }
-              } else if (mounted) {
-                orderController.updateOrderStatus('No Order');
-              }
-            },
-            onError: (e) {
-              print('Order listener error: $e'); // Debug log
-            },
-          );
+          if (snapshot.docs.isNotEmpty && mounted) {
+            final order = snapshot.docs.first.data();
+            final status = order['status'] ?? 'Pending Delivery';
+            orderController.updateOrderStatus(status);
+            if (status == 'Delivered') {
+              _orderSubscription?.cancel();
+              _orderSubscription = null;
+            }
+          } else if (mounted) {
+            orderController.updateOrderStatus('No Order');
+          }
+        },
+        onError: (e) {
+          print('Order listener error: $e'); // Debug log
+        },
+      );
     }
   }
 
@@ -112,28 +115,28 @@ class _HomeScreenState extends State<HomeScreen> {
             userName = data['name'] ?? 'User';
             isSubscribed = data['activeSubscription'] ?? false;
             isStudentVerified =
-                data.containsKey('studentDetails')
-                    ? (data['studentDetails']['isVerified'] ?? false)
-                    : false;
+            data.containsKey('studentDetails')
+                ? (data['studentDetails']['isVerified'] ?? false)
+                : false;
             activeAddress =
-                data['activeAddress'] != null
-                    ? (data['activeAddress'] is String
-                        ? data['activeAddress'] as String
-                        : LocationDetails.fromMap(
-                          data['activeAddress'] as Map<String, dynamic>,
-                        ).toString())
-                    : null;
+            data['activeAddress'] != null
+                ? (data['activeAddress'] is String
+                ? data['activeAddress'] as String
+                : LocationDetails.fromMap(
+              data['activeAddress'] as Map<String, dynamic>,
+            ).toString())
+                : null;
             if (isSubscribed && data['subscriptionPlan'] != null) {
               final plan = data['subscriptionPlan'] as String;
               final createdAt = data['createdAt'] as Timestamp?;
               if (createdAt != null) {
                 final startDate = createdAt.toDate();
                 final days =
-                    plan == '1 Week'
-                        ? 7
-                        : plan == '3 Weeks'
-                        ? 21
-                        : 28;
+                plan == '1 Week'
+                    ? 7
+                    : plan == '3 Weeks'
+                    ? 21
+                    : 28;
                 subscriptionEndDate = startDate.add(Duration(days: days));
               }
             }
@@ -165,14 +168,47 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         greeting =
-            hour >= 5 && hour < 12
-                ? 'Good Morning'
-                : hour >= 12 && hour < 17
-                ? 'Good Afternoon'
-                : hour >= 17 && hour < 20
-                ? 'Good Evening'
-                : 'Good Night';
+        hour >= 5 && hour < 12
+            ? 'Good Morning'
+            : hour >= 12 && hour < 17
+            ? 'Good Afternoon'
+            : hour >= 17 && hour < 20
+            ? 'Good Evening'
+            : 'Good Night';
       });
+    }
+  }
+
+  void _navigateToScreen(String title) {
+    print('Navigating to: $title'); // Debug log
+    switch (title) {
+      case 'Student Verification':
+        if (!isStudentVerified) {
+          Get.to(() => StudentVerificationSurvey());
+        }
+        break;
+      case 'Active Address':
+        Get.to(() => AddressManagementScreen());
+        break;
+      case 'Support Us':
+        _launchWhatsApp();
+        break;
+      default:
+        print('No navigation defined for: $title'); // Debug log
+    }
+  }
+
+  void _launchWhatsApp() async {
+    const phoneNumber = '+995500900095';
+    const message = 'Hello, I need support!';
+    final url = 'https://wa.me/$phoneNumber?text=${Uri.encodeFull(message)}';
+
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch WhatsApp')),
+      );
     }
   }
 
@@ -181,26 +217,42 @@ class _HomeScreenState extends State<HomeScreen> {
       {
         'title': 'Pause & Play',
         'description':
-            'Pause or resume your subscription anytime between 9 AM - 10 PM.',
+        'Pause or resume your subscription anytime between 9 AM - 10 PM.',
         'icon': Iconsax.play,
         'extraWidget': Obx(
-          () => Switch(
+              () => Switch(
             value: pausePlayController.isPaused.value,
             onChanged:
-                isSubscribed
-                    ? (value) =>
-                        pausePlayController.togglePausePlay(isSubscribed)
-                    : null,
-            activeColor: Colors.blue[600],
+            isSubscribed
+                ? (value) =>
+                pausePlayController.togglePausePlay(isSubscribed)
+                : null,
+            activeColor: Colors.white.withOpacity(0.9),
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.blue[200],
+            inactiveTrackColor: Colors.white.withOpacity(0.2),
+          ),
+        ),
+        'subtitle': Obx(
+              () => Text(
+            isSubscribed
+                ? (DateTime.now().hour >= 9 && DateTime.now().hour < 22
+                ? (pausePlayController.isPaused.value ? 'Paused' : 'Active')
+                : 'Switch unavailable now')
+                : 'Not subscribed',
+            style: TextStyle(
+              color: Colors.white.withAlpha(204),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       },
       {
         'title': 'Today\'s Order',
         'subtitle': Obx(
-          () => Text(
+              () => Text(
             isSubscribed
                 ? orderController.todayOrderStatus.value
                 : 'Subscribe to see today\'s order',
@@ -216,27 +268,39 @@ class _HomeScreenState extends State<HomeScreen> {
         'description': 'View the status of your current day\'s order.',
         'icon': Icons.delivery_dining,
         'extraWidget': Obx(
-          () => Icon(
-            orderController.todayOrderStatus.value == 'Delivered'
-                ? Icons.check_circle
-                : Icons.pending,
-            color:
-                orderController.todayOrderStatus.value == 'Delivered'
-                    ? Colors.green
-                    : Colors.orange,
-            size: 24,
+              () => Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              orderController.todayOrderStatus.value == 'Delivered'
+                  ? Icons.check_circle
+                  : Icons.pending,
+              color: Colors.white.withOpacity(0.9),
+              size: 24,
+            ),
           ),
         ),
       },
       {
         'title':
-            isSubscribed && subscriptionEndDate != null
-                ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
-                : 'No Plan Active',
-        'subtitle':
-            isSubscribed && subscriptionEndDate != null
-                ? 'Ends on ${subscriptionEndDate!.toString().substring(0, 10)}'
-                : 'Subscribe to a plan',
+        isSubscribed && subscriptionEndDate != null
+            ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
+            : 'No Plan Active',
+        'subtitle': Text(
+          isSubscribed && subscriptionEndDate != null
+              ? 'Ends on ${subscriptionEndDate!.toString().substring(0, 10)}'
+              : 'Subscribe to a plan',
+          style: TextStyle(
+            color: Colors.white.withAlpha(204),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         'description': 'Monitor your subscription duration and details.',
         'icon': Iconsax.calendar,
         'extraWidget': SizedBox(
@@ -247,20 +311,20 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               CircularProgressIndicator(
                 value:
-                    isSubscribed && subscriptionEndDate != null
-                        ? (subscriptionEndDate!
-                                    .difference(DateTime.now())
-                                    .inDays /
-                                (subscriptionEndDate!
-                                    .difference(
-                                      subscriptionEndDate!.subtract(
-                                        const Duration(days: 28),
-                                      ),
-                                    )
-                                    .inDays
-                                    .abs()))
-                            .clamp(0.0, 1.0)
-                        : 0.0,
+                isSubscribed && subscriptionEndDate != null
+                    ? (subscriptionEndDate!
+                    .difference(DateTime.now())
+                    .inDays /
+                    (subscriptionEndDate!
+                        .difference(
+                      subscriptionEndDate!.subtract(
+                        const Duration(days: 28),
+                      ),
+                    )
+                        .inDays
+                        .abs()))
+                    .clamp(0.0, 1.0)
+                    : 0.0,
                 strokeWidth: 5,
                 backgroundColor: Colors.white.withAlpha(51),
                 valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
@@ -283,24 +347,51 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       {
         'title': 'Student Verification',
-        'subtitle':
-            isStudentVerified
-                ? 'Verified (10% off)'
-                : 'Verify for 10% discount',
+        'subtitle': Text(
+          isStudentVerified ? 'Verified (10% off)' : 'Verify for 10% discount',
+          style: TextStyle(
+            color: Colors.white.withAlpha(204),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         'description': 'Verify your student status for a 10% discount.',
         'icon': Icons.school,
+        'hasNavigation': !isStudentVerified,
       },
       {
         'title': 'Active Address',
-        'subtitle': activeAddress ?? 'Set an address',
+        'subtitle': Text(
+          activeAddress ?? 'Set an address',
+          style: TextStyle(
+            color: Colors.white.withAlpha(204),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         'description': 'Manage addresses for seamless delivery.',
         'icon': Iconsax.location,
+        'hasNavigation': true,
       },
       {
         'title': 'Support Us',
-        'subtitle': 'Share feedback & report issues',
+        'subtitle': Text(
+          'Share feedback & report issues',
+          style: TextStyle(
+            color: Colors.white.withAlpha(204),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         'description': 'Help us improve by sharing feedback.',
         'icon': Iconsax.heart,
+        'hasNavigation': true,
       },
     ];
     filteredItems = List.from(allItems);
@@ -314,8 +405,8 @@ class _HomeScreenState extends State<HomeScreen> {
             allItems
                 .where(
                   (item) =>
-                      (item['title'] as String).toLowerCase().contains(query),
-                )
+                  (item['title'] as String).toLowerCase().contains(query),
+            )
                 .toList();
       });
     }
@@ -371,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       style: TextStyle(
                                         color: Colors.blue[900],
                                         fontSize:
-                                            MediaQuery.of(context).size.width *
+                                        MediaQuery.of(context).size.width *
                                             0.07,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -388,7 +479,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: TextStyle(
                                   color: Colors.blue[600],
                                   fontSize:
-                                      MediaQuery.of(context).size.width * 0.04,
+                                  MediaQuery.of(context).size.width * 0.04,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
@@ -418,12 +509,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               radius: 24,
                               backgroundColor: Colors.white,
                               backgroundImage:
-                                  _profileImage != null
-                                      ? FileImage(_profileImage!)
-                                      : const AssetImage(
-                                            'assets/profile_pic.jpg',
-                                          )
-                                          as ImageProvider,
+                              _profileImage != null
+                                  ? FileImage(_profileImage!)
+                                  : const AssetImage(
+                                'assets/profile_pic.jpg',
+                              )
+                              as ImageProvider,
                             ),
                           ),
                         ),
@@ -494,11 +585,118 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = filteredItems[index];
-                  return FlipCard(
-                    direction: FlipDirection.HORIZONTAL,
-                    front: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      child: Card(
+                  return GestureDetector(
+                    onTap:
+                    item['hasNavigation'] == true
+                        ? () => _navigateToScreen(item['title'] as String)
+                        : null,
+                    child: FlipCard(
+                      flipOnTouch: false,
+                      direction: FlipDirection.HORIZONTAL,
+                      front: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        child: Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Colors.blue[700]!, Colors.blue[900]!],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Stack(
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        if (item['icon'] != null)
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withAlpha(51),
+                                              borderRadius:
+                                              BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              item['icon'] as IconData,
+                                              color: Colors.white,
+                                              size: 24,
+                                            ),
+                                          ),
+                                        if (item['extraWidget'] != null)
+                                          Flexible(
+                                            child:
+                                            item['extraWidget'] as Widget,
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Flexible(
+                                      child: Text(
+                                        item['title'] as String,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Flexible(child: item['subtitle'] as Widget),
+                                  ],
+                                ),
+                                if (item['hasNavigation'] == true)
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.arrow_circle_right,
+                                        color: Colors.white.withOpacity(0.9),
+                                        size: 24,
+                                      ),
+                                    ),
+                                  )
+                                else if (item['title'] == 'Student Verification' && isStudentVerified)
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.check_circle,
+                                        color: Colors.white.withOpacity(0.9),
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      back: Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -515,108 +713,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  if (item['icon'] != null)
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withAlpha(51),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        item['icon'] as IconData,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                    ),
-                                  if (item['extraWidget'] != null)
-                                    Flexible(
-                                      child: item['extraWidget'] as Widget,
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
                               Flexible(
                                 child: Text(
-                                  item['title'] as String,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
+                                  item['description'] as String,
+                                  style: TextStyle(
+                                    color: Colors.white.withAlpha(230),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
                                   ),
-                                  maxLines: 2,
+                                  maxLines: 5,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Flexible(
-                                child:
-                                    item['subtitle'] is Widget
-                                        ? item['subtitle'] as Widget
-                                        : Text(
-                                          index == 0
-                                              ? (isSubscribed
-                                                  ? (DateTime.now().hour >= 9 &&
-                                                          DateTime.now().hour <
-                                                              22
-                                                      ? (pausePlayController
-                                                              .isPaused
-                                                              .value
-                                                          ? 'Paused'
-                                                          : 'Active')
-                                                      : 'Switch unavailable now')
-                                                  : 'Not subscribed')
-                                              : item['subtitle'] as String,
-                                          style: TextStyle(
-                                            color: Colors.white.withAlpha(204),
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                              ),
                             ],
                           ),
-                        ),
-                      ),
-                    ),
-                    back: Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.blue[700]!, Colors.blue[900]!],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                item['description'] as String,
-                                style: TextStyle(
-                                  color: Colors.white.withAlpha(230),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                maxLines: 5,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ),
