@@ -23,12 +23,10 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
   }
 
   Future<void> _login(BuildContext context) async {
-    // Store context locally before any async operations
     final currentContext = context;
     final email = _emailController.text.trim();
     final user = _auth.currentUser;
 
-    // Early validation checks (sync, no mounted check needed)
     if (email.isEmpty) {
       if (currentContext.mounted) {
         ScaffoldMessenger.of(currentContext).showSnackBar(
@@ -47,12 +45,12 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
       return;
     }
 
-    // Start loading (check mounted)
     if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      final deliveryDoc = await _firestore.collection('delivery_guys').doc(email).get();
+      final deliveryDoc =
+          await _firestore.collection('delivery_guys').doc(email).get();
       final data = deliveryDoc.data() ?? {};
       final isVerified = data['verified'] as bool? ?? false;
 
@@ -67,28 +65,30 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
         debugPrint('Created new delivery guy entry for $email');
       }
 
-      // Navigation check (both mounted and context.mounted)
       if (mounted && currentContext.mounted) {
         Navigator.pushReplacement(
           currentContext,
           MaterialPageRoute(
-            builder: (_) => isVerified
-                ? DeliveryScreen(email: email)
-                : WaitingForVerificationScreen(email: email),
+            builder:
+                (_) =>
+                    isVerified
+                        ? const DeliveryScreen() // Removed email parameter
+                        : WaitingForVerificationScreen(email: email),
           ),
         );
       }
     } catch (e) {
       debugPrint('Login error: $e');
       if (currentContext.mounted) {
-        ScaffoldMessenger.of(currentContext).showSnackBar(
-          SnackBar(content: Text('Login failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          currentContext,
+        ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,7 +98,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.blue[900]!.withAlpha(13), Colors.grey[100]!], // 0.05 -> 13
+                colors: [Colors.blue[900]!.withAlpha(13), Colors.grey[100]!],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -147,7 +147,9 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(30),
+            ),
           ),
           child: const Center(
             child: Column(
@@ -157,12 +159,21 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
                 SizedBox(height: 16),
                 Text(
                   'Delivery Guy Login',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 SizedBox(height: 8),
                 Text(
                   'Sign in to start delivering',
-                  style: TextStyle(fontSize: 16, color: Colors.white70, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
             ),
@@ -177,9 +188,19 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.white, Colors.grey[50]!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+          colors: [Colors.white, Colors.grey[50]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.grey.withAlpha(51), blurRadius: 10, offset: const Offset(0, 4))], // 0.2 -> 51
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withAlpha(51),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,7 +209,10 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.blue[900]!.withAlpha(26), shape: BoxShape.circle), // 0.1 -> 26
+                decoration: BoxDecoration(
+                  color: Colors.blue[900]!.withAlpha(26),
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(Icons.email, color: Colors.blue[900], size: 20),
               ),
               const SizedBox(width: 12),
@@ -197,7 +221,11 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
                 children: [
                   Text(
                     'Your Email',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.blue[900]),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue[900],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -216,8 +244,14 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
               hintStyle: TextStyle(color: Colors.grey[400]),
               filled: true,
               fillColor: Colors.white,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 16,
+              ),
               prefixIcon: Icon(Icons.email, color: Colors.blue[900]),
             ),
             style: TextStyle(color: Colors.blue[900]),
@@ -232,29 +266,38 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       width: double.infinity,
-      child: _isLoading
-          ? Center(child: CircularProgressIndicator(color: Colors.blue[900]))
-          : ElevatedButton(
-        onPressed: () => _login(context),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          backgroundColor: Colors.blue[900],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 8,
-          shadowColor: Colors.blue.withAlpha(77), // 0.3 -> 77
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.login, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text(
-              'Login',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
+      child:
+          _isLoading
+              ? Center(
+                child: CircularProgressIndicator(color: Colors.blue[900]),
+              )
+              : ElevatedButton(
+                onPressed: () => _login(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  backgroundColor: Colors.blue[900],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 8,
+                  shadowColor: Colors.blue.withAlpha(77),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.login, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Login',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
     );
   }
 }
@@ -273,7 +316,7 @@ class WaitingForVerificationScreen extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.blue[900]!.withAlpha(13), Colors.grey[100]!], // 0.05 -> 13
+                colors: [Colors.blue[900]!.withAlpha(13), Colors.grey[100]!],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -322,7 +365,9 @@ class WaitingForVerificationScreen extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(30),
+            ),
           ),
           child: const Center(
             child: Column(
@@ -332,12 +377,21 @@ class WaitingForVerificationScreen extends StatelessWidget {
                 SizedBox(height: 16),
                 Text(
                   'Verification Pending',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 SizedBox(height: 8),
                 Text(
                   'Awaiting admin approval',
-                  style: TextStyle(fontSize: 16, color: Colors.white70, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
             ),
@@ -352,9 +406,19 @@ class WaitingForVerificationScreen extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.white, Colors.grey[50]!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+          colors: [Colors.white, Colors.grey[50]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.grey.withAlpha(51), blurRadius: 10, offset: const Offset(0, 4))], // 0.2 -> 51
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withAlpha(51),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -362,7 +426,11 @@ class WaitingForVerificationScreen extends StatelessWidget {
           const SizedBox(height: 24),
           Text(
             'Waiting for Verification',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.blue[900]),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue[900],
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -385,9 +453,11 @@ class WaitingForVerificationScreen extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 18),
           backgroundColor: Colors.blue[900],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           elevation: 8,
-          shadowColor: Colors.blue.withAlpha(77), // 0.3 -> 77
+          shadowColor: Colors.blue.withAlpha(77),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -396,7 +466,11 @@ class WaitingForVerificationScreen extends StatelessWidget {
             SizedBox(width: 8),
             Text(
               'Back',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
           ],
         ),

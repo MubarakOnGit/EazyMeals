@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 import '../controllers/order_status_controller.dart';
@@ -26,7 +27,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _scheduleOrderCancellation();
-    _checkUserData();
   }
 
   void _scheduleOrderCancellation() {
@@ -73,45 +73,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<void> _checkUserData() async {
+  Future<Map<String, dynamic>> _fetchCustomerData() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-      final userData = userDoc.data() ?? {};
-      final name = userData['name'] as String?;
-      final phone = userData['phone'] as String?;
+    if (user == null) throw Exception('User not logged in');
+    final callable = FirebaseFunctions.instance.httpsCallable(
+      'getCustomerData',
+    );
+    final result = await callable();
+    return result.data as Map<String, dynamic>;
+  }
 
-      if (mounted) {
-        setState(
-          () =>
-              _isDataMissing =
-                  name == null ||
-                  phone == null ||
-                  name.isEmpty ||
-                  phone.isEmpty,
-        );
-      }
-    }
+  Future<void> _checkUserData(Map<String, dynamic> userData) async {
+    final name = userData['name'] as String?;
+    final phone = userData['phone'] as String?;
+    setState(
+      () =>
+          _isDataMissing =
+              name == null || phone == null || name.isEmpty || phone.isEmpty,
+    );
   }
 
   Future<void> _saveUserData() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please fill in all fields')),
-          );
-        }
-        return;
-      }
-
+    if (user != null &&
+        _nameController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty) {
       await _firestore.collection('users').doc(user.uid).set({
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
       }, SetOptions(merge: true));
-
-      if (mounted) setState(() => _isDataMissing = false);
+      setState(() => _isDataMissing = false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
     }
   }
 
@@ -136,7 +131,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ],
           ),
     );
-
     if (confirm == true) {
       await _firestore
           .collection('users')
@@ -144,13 +138,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           .collection('pendingOrders')
           .doc(docId)
           .delete();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pending subscription cancelled successfully'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pending subscription cancelled')),
+      );
     }
   }
 
@@ -186,7 +176,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
-
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: Stack(
@@ -196,10 +185,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.blue[900]!.withAlpha(26),
-                  Colors.grey[100]!,
-                ], // 0.1 -> 26
+                colors: [Colors.blue[900]!.withAlpha(26), Colors.grey[100]!],
               ),
             ),
           ),
@@ -227,51 +213,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   child:
                       user == null
                           ? _buildEmptyState('Please log in')
-                          : _isDataMissing
-                          ? _buildDataInputCard()
-                          : StreamBuilder<DocumentSnapshot>(
-                            stream:
-                                _firestore
-                                    .collection('users')
-                                    .doc(user.uid)
-                                    .snapshots(),
-                            builder: (context, userSnapshot) {
-                              if (!userSnapshot.hasData) return _buildLoading();
-                              if (userSnapshot.hasError)
-                                return _buildError('Error loading data');
-                              final userData =
-                                  userSnapshot.data!.data()
-                                      as Map<String, dynamic>? ??
-                                  {};
-                              return Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildSubscriptionSection(
-                                      'Pending Plans',
-                                      _buildPendingSubscriptions(user.uid),
-                                      Colors.orange,
+                          : FutureBuilder<Map<String, dynamic>>(
+                            future: _fetchCustomerData(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) return _buildLoading();
+                              if (snapshot.hasError)
+                                return _buildError('Error: ${snapshot.error}');
+                              final data = snapshot.data!;
+                              _checkUserData(data['user']);
+                              return _isDataMissing
+                                  ? _buildDataInputCard()
+                                  : Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSubscriptionSection(
+                                          'Pending Plans',
+                                          _buildPendingSubscriptions(
+                                            user.uid,
+                                            data['pendingOrders'],
+                                          ),
+                                          Colors.orange,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        _buildSubscriptionSection(
+                                          'Active Plan',
+                                          _buildActiveSubscription(
+                                            data['user'],
+                                            user.uid,
+                                            data['orders'],
+                                          ),
+                                          Colors.green,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        _buildSubscriptionSection(
+                                          'Past Plans',
+                                          _buildEndedSubscriptions(
+                                            data['pastSubscriptions'],
+                                          ),
+                                          Colors.red,
+                                        ),
+                                        const SizedBox(height: 80),
+                                      ],
                                     ),
-                                    const SizedBox(height: 24),
-                                    _buildSubscriptionSection(
-                                      'Active Plan',
-                                      _buildActiveSubscription(
-                                        userData,
-                                        user.uid,
-                                      ),
-                                      Colors.green,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    _buildSubscriptionSection(
-                                      'Past Plans',
-                                      _buildEndedSubscriptions(user.uid),
-                                      Colors.red,
-                                    ),
-                                    const SizedBox(height: 80),
-                                  ],
-                                ),
-                              );
+                                  );
                             },
                           ),
                 ),
@@ -288,7 +275,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => SubscriptionScreen(),
+                        builder: (context) => const SubscriptionScreen(),
                       ),
                     ).then((_) => setState(() {})),
                 label: const Text(
@@ -342,85 +329,69 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildPendingSubscriptions(String userId) {
-    return StreamBuilder<QuerySnapshot>(
-      stream:
-          _firestore
-              .collection('users')
-              .doc(userId)
-              .collection('pendingOrders')
-              .where('status', isEqualTo: 'Pending Payment')
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return _buildLoading();
-        if (snapshot.hasError)
-          return _buildError('Error loading pending plans');
-        final pendingSubscriptions = snapshot.data!.docs;
-        if (pendingSubscriptions.isEmpty)
-          return _buildEmptyState('No pending plans yet');
-
-        return Column(
-          children:
-              pendingSubscriptions.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-                final orderId = data['orderId'] as String? ?? 'Unknown';
-
-                return _buildCard(
-                  gradient: null,
-                  header: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.pending_actions,
-                        color: Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Pending',
-                        style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+  Widget _buildPendingSubscriptions(
+    String userId,
+    List<dynamic> pendingOrders,
+  ) {
+    if (pendingOrders.isEmpty) return _buildEmptyState('No pending plans yet');
+    return Column(
+      children:
+          pendingOrders.map((data) {
+            final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+            final orderId = data['orderId'] as String? ?? 'Unknown';
+            return _buildCard(
+              gradient: null,
+              header: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.pending_actions,
+                    color: Colors.orange,
+                    size: 20,
                   ),
-                  title: '${data['subscriptionPlan']} (${data['category']})',
-                  subtitle: data['mealType'],
-                  details: [
-                    _buildDetailRow(
-                      Icons.fingerprint,
-                      'ID: $orderId',
-                      Colors.grey[700]!,
+                  const SizedBox(width: 8),
+                  Text(
+                    'Pending',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
-                    _buildDetailRow(
-                      Icons.calendar_today,
-                      'Requested: ${_formatDate(createdAt)}',
-                      Colors.grey[700]!,
-                    ),
-                    _buildDetailRow(
-                      Icons.attach_money,
-                      '\$${data['amount']}',
-                      Colors.grey[700]!,
-                    ),
-                  ],
-                  action: IconButton(
-                    icon: const Icon(Icons.cancel, color: Colors.redAccent),
-                    onPressed: () => _cancelPendingSubscription(userId, doc.id),
                   ),
-                );
-              }).toList(),
-        );
-      },
+                ],
+              ),
+              title: '${data['subscriptionPlan']} (${data['category']})',
+              subtitle: data['mealType'],
+              details: [
+                _buildDetailRow(
+                  Icons.fingerprint,
+                  'ID: $orderId',
+                  Colors.grey[700]!,
+                ),
+                _buildDetailRow(
+                  Icons.calendar_today,
+                  'Requested: ${_formatDate(createdAt)}',
+                  Colors.grey[700]!,
+                ),
+                _buildDetailRow(
+                  Icons.attach_money,
+                  '\$${data['amount']}',
+                  Colors.grey[700]!,
+                ),
+              ],
+              action: IconButton(
+                icon: const Icon(Icons.cancel, color: Colors.redAccent),
+                onPressed: () => _cancelPendingSubscription(userId, data['id']),
+              ),
+            );
+          }).toList(),
     );
   }
 
   Widget _buildActiveSubscription(
     Map<String, dynamic> userData,
     String userId,
+    Map<String, dynamic> orders,
   ) {
     final isActive = userData['activeSubscription'] as bool? ?? false;
     if (!isActive ||
@@ -428,7 +399,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         !userData.containsKey('subscriptionId')) {
       return _buildEmptyState('No active plan');
     }
-
     final startDate =
         (userData['subscriptionStartDate'] as Timestamp?)?.toDate();
     final endDate = (userData['subscriptionEndDate'] as Timestamp?)?.toDate();
@@ -482,81 +452,60 @@ class _HistoryScreenState extends State<HistoryScreen> {
           isPaused ? Colors.red : Colors.green,
         ),
       ],
-      expandableContent: _buildOrderDetails(userId, subscriptionId),
+      expandableContent: _buildOrderDetails(userId, subscriptionId, orders),
       isExpandable: true,
       cardKey: subscriptionId,
     );
   }
 
-  Widget _buildEndedSubscriptions(String userId) {
-    return StreamBuilder<QuerySnapshot>(
-      stream:
-          _firestore
-              .collection('users')
-              .doc(userId)
-              .collection('pastSubscriptions')
-              .orderBy('subscriptionEndDate', descending: true)
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return _buildLoading();
-        if (snapshot.hasError) return _buildError('Error loading past plans');
-        if (snapshot.data!.docs.isEmpty)
-          return _buildEmptyState('No past plans');
-
-        return Column(
-          children:
-              snapshot.data!.docs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final startDate =
-                    (data['subscriptionStartDate'] as Timestamp?)?.toDate();
-                final endDate =
-                    (data['subscriptionEndDate'] as Timestamp?)?.toDate();
-                final subscriptionId = data['subscriptionId'] as String? ?? '';
-
-                return _buildCard(
-                  gradient: LinearGradient(
-                    colors: [Colors.grey[800]!, Colors.grey[700]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+  Widget _buildEndedSubscriptions(List<dynamic> pastSubscriptions) {
+    if (pastSubscriptions.isEmpty) return _buildEmptyState('No past plans');
+    return Column(
+      children:
+          pastSubscriptions.map((data) {
+            final startDate =
+                (data['subscriptionStartDate'] as Timestamp?)?.toDate();
+            final endDate =
+                (data['subscriptionEndDate'] as Timestamp?)?.toDate();
+            final subscriptionId = data['subscriptionId'] as String? ?? '';
+            return _buildCard(
+              gradient: LinearGradient(
+                colors: [Colors.grey[800]!, Colors.grey[700]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              header: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.history, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Ended',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  header: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.history, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Ended',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  title: '${data['subscriptionPlan']} (${data['category']})',
-                  subtitle: data['mealType'],
-                  details: [
-                    _buildDetailRow(
-                      Icons.fingerprint,
-                      'ID: $subscriptionId',
-                      Colors.white70,
-                    ),
-                    _buildDetailRow(
-                      Icons.calendar_today,
-                      'Valid: ${_formatDate(startDate)} - ${_formatDate(endDate)}',
-                      Colors.white70,
-                    ),
-                    _buildDetailRow(
-                      Icons.cancel,
-                      'Status: Cancelled',
-                      Colors.red,
-                    ),
-                  ],
-                );
-              }).toList(),
-        );
-      },
+                ],
+              ),
+              title: '${data['subscriptionPlan']} (${data['category']})',
+              subtitle: data['mealType'],
+              details: [
+                _buildDetailRow(
+                  Icons.fingerprint,
+                  'ID: $subscriptionId',
+                  Colors.white70,
+                ),
+                _buildDetailRow(
+                  Icons.calendar_today,
+                  'Valid: ${_formatDate(startDate)} - ${_formatDate(endDate)}',
+                  Colors.white70,
+                ),
+                _buildDetailRow(Icons.cancel, 'Status: Cancelled', Colors.red),
+              ],
+            );
+          }).toList(),
     );
   }
 
@@ -588,7 +537,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.1 -> 26
+        ],
       ),
       child: Column(
         children: [
@@ -683,12 +632,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildOrderDetails(String userId, String subscriptionId) {
+  Widget _buildOrderDetails(
+    String userId,
+    String subscriptionId,
+    Map<String, dynamic> orders,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Today’s Order',
+          'Today’s Orders',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -696,52 +649,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Obx(
-          () => Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
-              ], // 0.1 -> 26
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      orderController.todayOrderStatus.value == 'No Order'
-                          ? 'No order for today'
-                          : 'Today\'s Meal',
-                      style: TextStyle(
-                        color: Colors.blue[900],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      _formatDate(DateTime.now()),
-                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                    ),
-                  ],
-                ),
-                Text(
-                  orderController.todayOrderStatus.value,
-                  style: TextStyle(
-                    color: _getStatusColor(
-                      orderController.todayOrderStatus.value,
-                    ),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+        ...orders['today']
+            .map((order) => _buildOrderTile(order, order['status']))
+            .toList(),
+        if (orders['today'].isEmpty)
+          Text(
+            'No orders for today',
+            style: TextStyle(color: Colors.grey[700]),
           ),
-        ),
         const SizedBox(height: 12),
         Text(
           'Past Orders',
@@ -752,11 +667,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        _buildOrderStream(userId, subscriptionId, const [
-          'Delivered',
-          'Cancelled',
-          'Paused',
-        ], true),
+        ...orders['past']
+            .map((order) => _buildOrderTile(order, order['status']))
+            .toList(),
+        if (orders['past'].isEmpty)
+          Text('No past orders', style: TextStyle(color: Colors.grey[700])),
         const SizedBox(height: 12),
         Text(
           'Upcoming Orders',
@@ -767,45 +682,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        _buildOrderStream(userId, subscriptionId, const [
-          'Pending Delivery',
-        ], false),
+        ...orders['upcoming']
+            .map((order) => _buildOrderTile(order, order['status']))
+            .toList(),
+        if (orders['upcoming'].isEmpty)
+          Text('No upcoming orders', style: TextStyle(color: Colors.grey[700])),
       ],
-    );
-  }
-
-  Widget _buildOrderStream(
-    String userId,
-    String subscriptionId,
-    List<String> statuses,
-    bool isPast,
-  ) {
-    return StreamBuilder<QuerySnapshot>(
-      stream:
-          _firestore
-              .collection('orders')
-              .where('userId', isEqualTo: userId)
-              .where('subscriptionId', isEqualTo: subscriptionId)
-              .where('status', whereIn: statuses)
-              .orderBy('date', descending: isPast)
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return _buildLoading();
-        if (snapshot.data!.docs.isEmpty) {
-          return Text(
-            isPast ? 'No past orders' : 'No upcoming orders',
-            style: TextStyle(color: Colors.grey[700]),
-          );
-        }
-        return Column(
-          children:
-              snapshot.data!.docs.map((doc) {
-                final order = doc.data() as Map<String, dynamic>;
-                final status = order['status'];
-                return _buildOrderTile(order, status);
-              }).toList(),
-        );
-      },
     );
   }
 
@@ -817,9 +699,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
-        ], // 0.1 -> 26
+        boxShadow: [BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6)],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -862,7 +742,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(color: Colors.black.withAlpha(51), blurRadius: 10),
-          ], // 0.2 -> 51
+          ],
         ),
         padding: const EdgeInsets.all(20),
         child: Column(

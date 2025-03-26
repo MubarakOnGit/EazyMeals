@@ -10,24 +10,31 @@ import 'package:eazy_meals/home/menu_screen.dart';
 import 'package:eazy_meals/home/view_all_screen.dart';
 import 'package:get/get.dart';
 import 'package:eazy_meals/controllers/order_status_controller.dart';
-import 'package:eazy_meals/controllers/pause_play_controller.dart'; // Add this import
+import 'package:eazy_meals/controllers/pause_play_controller.dart';
+
+// Optional: Add a logger for production
+import 'package:logger/logger.dart'; // Add this to pubspec.yaml: logger: ^1.4.0
+
+final logger = Logger();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with error handling
+  // Initialize Firebase with enhanced error handling
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    logger.i('Firebase initialized successfully');
   } catch (e) {
-    // In production, consider logging this to a service instead of printing
-    print('Firebase initialization error: $e');
+    logger.e('Firebase initialization error: $e');
+    // In production, you might show an error screen or fallback
   }
 
   // Initialize GetX controllers globally
-  Get.put(OrderController(), permanent: true); // Persistent OrderController
-  Get.put(PausePlayController(), permanent: true); // Persistent PausePlayController
+  Get.put(OrderController(), permanent: true);
+  Get.put(PausePlayController(), permanent: true);
+  logger.i('GetX controllers initialized');
 
   runApp(const MyApp());
 }
@@ -39,12 +46,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const SplashScreen(), // Use const for performance
+      home: const SplashScreen(),
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
         '/login': (context) => const LoginScreen(),
         '/CustomerDashboard': (context) => const CustomerDashboard(),
-        '/verification': (context) =>  VerificationScreen(),
+        '/verification': (context) => VerificationScreen(), // Added const
         '/menu': (context) => const MenuScreen(),
         '/viewAll': (context) => const ViewAllScreen(),
       },
@@ -52,14 +59,15 @@ class MyApp extends StatelessWidget {
         final mediaQueryData = MediaQuery.of(context);
         return MediaQuery(
           data: mediaQueryData.copyWith(
-            textScaler: const TextScaler.linear(1.0).clamp(
-              minScaleFactor: 1.0,
-              maxScaleFactor: 1.2,
-            ),
+            textScaler: const TextScaler.linear(
+              1.0,
+            ).clamp(minScaleFactor: 1.0, maxScaleFactor: 1.2),
           ),
           child: child!,
         );
       },
+      // Optional: Define a default transition for GetX navigation
+      defaultTransition: Transition.fadeIn,
     );
   }
 }

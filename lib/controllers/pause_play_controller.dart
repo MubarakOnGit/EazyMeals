@@ -22,18 +22,34 @@ class PausePlayController extends GetxController {
         if (doc.exists) {
           final data = doc.data() ?? {};
           isPaused.value = data['isPaused'] ?? false;
-          pauseStartTime.value =
-              data['pausedAt'] != null
-                  ? (data['pausedAt'] as Timestamp).toDate()
-                  : null;
-          subscriptionEndDate.value =
-              data['subscriptionEndDate'] != null
-                  ? (data['subscriptionEndDate'] as Timestamp).toDate()
-                  : null;
-          print('Pause state updated: isPaused=${isPaused.value}');
+          pauseStartTime.value = _parseTimestamp(data['pausedAt']);
+          if (subscriptionEndDate.value == null ||
+              data['subscriptionEndDate'] != null) {
+            subscriptionEndDate.value = _parseTimestamp(
+              data['subscriptionEndDate'],
+            );
+          }
+          print(
+            'Pause state updated: isPaused=${isPaused.value}, subEndDate=${subscriptionEndDate.value}',
+          );
         }
       }, onError: (e) => print('Error listening to pause state: $e'));
     }
+  }
+
+  DateTime? _parseTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is Map<String, dynamic> &&
+        value.containsKey('seconds') &&
+        value.containsKey('nanoseconds')) {
+      return Timestamp(
+        value['seconds'] as int,
+        value['nanoseconds'] as int,
+      ).toDate();
+    }
+    print('Unexpected timestamp format: $value');
+    return null;
   }
 
   Future<void> togglePausePlay(bool isSubscribed) async {
@@ -51,7 +67,7 @@ class PausePlayController extends GetxController {
     if (now.hour >= 9 && now.hour < 22) {
       final newIsPaused = !isPaused.value;
       print('Toggling to: $newIsPaused');
-      isPaused.value = newIsPaused; // Update local state immediately
+      isPaused.value = newIsPaused;
 
       if (newIsPaused) {
         pauseStartTime.value = now;
@@ -77,7 +93,7 @@ class PausePlayController extends GetxController {
           await resumeNextDay(user.uid);
         }
       } catch (e) {
-        isPaused.value = !newIsPaused; // Revert on error
+        isPaused.value = !newIsPaused;
         Get.snackbar('Error', 'Failed to update subscription status: $e');
         print('Toggle pause/play error: $e');
       }
@@ -127,6 +143,7 @@ class PausePlayController extends GetxController {
       for (var order in orders.docs) {
         await order.reference.update({'status': 'Paused'});
       }
+      print('Marked next day orders as Paused');
     } catch (e) {
       print('Error marking next day paused: $e');
     }
@@ -173,6 +190,7 @@ class PausePlayController extends GetxController {
       for (var order in orders.docs) {
         await order.reference.update({'status': 'Pending Delivery'});
       }
+      print('Resumed next day orders to Pending Delivery');
     } catch (e) {
       print('Error resuming next day: $e');
     }

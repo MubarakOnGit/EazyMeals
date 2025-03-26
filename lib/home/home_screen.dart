@@ -5,13 +5,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
-import 'address_management_screen.dart';
-import 'student_verification_survey.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../controllers/order_status_controller.dart';
 import '../controllers/pause_play_controller.dart';
+import '../home/address_management_screen.dart';
+import '../home/student_verification_survey.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,7 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final OrderController orderController = Get.find<OrderController>();
-  final PausePlayController pausePlayController = Get.find<PausePlayController>();
+  final PausePlayController pausePlayController =
+      Get.find<PausePlayController>();
   final TextEditingController _searchController = TextEditingController();
   String userName = 'User';
   File? _profileImage;
@@ -37,11 +38,16 @@ class _HomeScreenState extends State<HomeScreen> {
   String? activeAddress;
   StreamSubscription<QuerySnapshot>? _orderSubscription;
   Timer? _dailyRefreshTimer;
+  bool _isDataLoaded = false; // Prevent duplicate calls
+  int _loadCounter = 0; // Track _loadUserData calls
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    if (!_isDataLoaded) {
+      _loadUserData();
+      _isDataLoaded = true;
+    }
     _loadProfileImage();
     _setGreeting();
     _searchController.addListener(_filterItems);
@@ -71,71 +77,112 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startOrderListener() {
     _orderSubscription?.cancel();
     final user = _auth.currentUser;
-    if (user != null) {
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-      _orderSubscription = _firestore
-          .collection('orders')
-          .where('userId', isEqualTo: user.uid)
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
-          .snapshots()
-          .listen(
-            (snapshot) {
-          if (snapshot.docs.isNotEmpty && mounted) {
-            final order = snapshot.docs.first.data();
-            final status = order['status'] ?? 'Pending Delivery';
-            orderController.updateOrderStatus(status);
-            if (status == 'Delivered') {
-              _orderSubscription?.cancel();
-              _orderSubscription = null;
-            }
-          } else if (mounted) {
-            orderController.updateOrderStatus('No Order');
-          }
-        },
-        onError: (e) => print('Order listener error: $e'),
-      );
+    if (user == null) {
+      print('No authenticated user found');
+      return;
     }
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    _orderSubscription = _firestore
+        .collection('orders')
+        .where('userId', isEqualTo: user.uid)
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
+        .snapshots()
+        .listen((snapshot) {
+          // Rely on OrderController's streams
+        }, onError: (e) => print('Order listener error: $e'));
   }
 
   Future<void> _loadUserData() async {
+    _loadCounter++;
+    print('Loading user data - Call #$_loadCounter');
     final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && mounted) {
-          final data = doc.data() ?? {};
-          setState(() {
-            userName = data['name'] ?? 'User';
-            isSubscribed = data['activeSubscription'] ?? false;
-            isStudentVerified = data.containsKey('studentDetails')
-                ? (data['studentDetails']['isVerified'] ?? false)
-                : false;
-            activeAddress = data['activeAddress'] != null
-                ? (data['activeAddress'] is String
-                ? data['activeAddress'] as String
-                : LocationDetails.fromMap(data['activeAddress'] as Map<String, dynamic>).toString())
-                : null;
-            if (isSubscribed && data['subscriptionPlan'] != null) {
-              final plan = data['subscriptionPlan'] as String;
-              final createdAt = data['createdAt'] as Timestamp?;
-              if (createdAt != null) {
-                final startDate = createdAt.toDate();
-                final days = plan == '1 Week' ? 7 : plan == '3 Weeks' ? 21 : 28;
-                subscriptionEndDate = startDate.add(Duration(days: days));
-                pausePlayController.subscriptionEndDate.value = subscriptionEndDate;
-              }
+    if (user == null) {
+      print('No authenticated user found');
+      return;
+    }
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        final data = doc.data() ?? {};
+        print('Full Firestore data: $data');
+        setState(() {
+          print('Raw name: ${data['name']}');
+          userName = data['name'] is String ? data['name'] as String : 'User';
+          print('Raw activeSubscription: ${data['activeSubscription']}');
+          isSubscribed =
+              data['activeSubscription'] is bool
+                  ? data['activeSubscription'] as bool
+                  : false;
+          print('Raw studentDetails: ${data['studentDetails']}');
+          isStudentVerified =
+              data.containsKey('studentDetails')
+                  ? (data['studentDetails'] is Map
+                      ? (data['studentDetails']['isVerified'] ?? false)
+                      : false)
+                  : false;
+          print('Raw activeAddress: ${data['activeAddress']}');
+          if (data['activeAddress'] != null) {
+            if (data['activeAddress'] is String) {
+              activeAddress = data['activeAddress'] as String;
+            } else if (data['activeAddress'] is Map<String, dynamic>) {
+              final addressMap = data['activeAddress'] as Map<String, dynamic>;
+              activeAddress =
+                  addressMap['address']?.toString() ??
+                  addressMap['street']?.toString() ??
+                  'No address set';
+            } else {
+              print(
+                'Unexpected activeAddress type: ${data['activeAddress'].runtimeType}',
+              );
+              activeAddress = 'No address set';
             }
-            print('Loaded user data: isSubscribed=$isSubscribed, subEndDate=$subscriptionEndDate');
-          });
-        }
-      } catch (e) {
-        print('Error loading user data: $e');
+          } else {
+            activeAddress = null;
+          }
+          print('Processed activeAddress: $activeAddress');
+          if (isSubscribed && data['subscriptionPlan'] != null) {
+            print('Raw subscriptionPlan: ${data['subscriptionPlan']}');
+            final plan =
+                data['subscriptionPlan'] is String
+                    ? data['subscriptionPlan'] as String
+                    : data['subscriptionPlan'].toString();
+            print('Processed subscriptionPlan: $plan');
+            print(
+              'Raw subscriptionStartDate: ${data['subscriptionStartDate']}',
+            );
+            final startDate =
+                (data['subscriptionStartDate'] is Timestamp
+                    ? (data['subscriptionStartDate'] as Timestamp).toDate()
+                    : null);
+            if (startDate != null) {
+              final days =
+                  plan == '1 Week'
+                      ? 7
+                      : plan == '3 Weeks'
+                      ? 21
+                      : 28;
+              subscriptionEndDate = startDate.add(Duration(days: days));
+              pausePlayController.subscriptionEndDate.value =
+                  subscriptionEndDate;
+            }
+          }
+          print(
+            'Loaded user data: isSubscribed=$isSubscribed, subEndDate=$subscriptionEndDate',
+          );
+        });
       }
+    } catch (e, stackTrace) {
+      print('Error loading user data: $e - Full stack trace: $stackTrace');
+      rethrow;
+    }
+    try {
       _initializeItems();
+    } catch (e, stackTrace) {
+      print('Error in _initializeItems: $e - Full stack trace: $stackTrace');
     }
   }
 
@@ -157,13 +204,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final hour = now.hour;
     if (mounted) {
       setState(() {
-        greeting = hour >= 5 && hour < 12
-            ? 'Good Morning'
-            : hour >= 12 && hour < 17
-            ? 'Good Afternoon'
-            : hour >= 17 && hour < 20
-            ? 'Good Evening'
-            : 'Good Night';
+        greeting =
+            hour >= 5 && hour < 12
+                ? 'Good Morning'
+                : hour >= 12 && hour < 17
+                ? 'Good Afternoon'
+                : hour >= 17 && hour < 20
+                ? 'Good Evening'
+                : 'Good Night';
       });
     }
   }
@@ -205,170 +253,41 @@ class _HomeScreenState extends State<HomeScreen> {
     allItems = [
       {
         'title': 'Pause & Play',
-        'description': 'Pause or resume your subscription anytime between 9 AM - 10 PM.',
+        'description':
+            'Pause or resume your subscription anytime between 9 AM - 10 PM.',
         'icon': Iconsax.play,
-        'extraWidget': Obx(
-              () => Switch(
-            value: pausePlayController.isPaused.value,
-            onChanged: isSubscribed
-                ? (value) => pausePlayController.togglePausePlay(isSubscribed)
-                : null,
-            activeColor: Colors.white.withOpacity(0.9),
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.white.withOpacity(0.2),
-          ),
-        ),
-        'subtitle': Obx(
-              () => Text(
-            isSubscribed
-                ? (DateTime.now().hour >= 9 && DateTime.now().hour < 22
-                ? (pausePlayController.isPaused.value ? 'Paused' : 'Active')
-                : 'Switch unavailable now')
-                : 'Not subscribed',
-            style: TextStyle(
-              color: Colors.white.withAlpha(204),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        'hasExtraWidget': true,
+        'hasReactiveSubtitle': true,
       },
       {
         'title': 'Today\'s Order',
-        'subtitle': Obx(
-              () => Text(
-            isSubscribed
-                ? orderController.todayOrderStatus.value
-                : 'Subscribe to see today\'s order',
-            style: TextStyle(
-              color: Colors.white.withAlpha(204),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
         'description': 'View the status of your current day\'s order.',
         'icon': Icons.delivery_dining,
-        'extraWidget': Obx(
-              () => Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              orderController.todayOrderStatus.value == 'Delivered'
-                  ? Icons.check_circle
-                  : Icons.pending,
-              color: Colors.white.withOpacity(0.9),
-              size: 24,
-            ),
-          ),
-        ),
+        'hasExtraWidget': true,
+        'hasReactiveSubtitle': true,
       },
       {
-        'title': isSubscribed && subscriptionEndDate != null
-            ? '${subscriptionEndDate!.difference(DateTime.now()).inDays} Days Left'
-            : 'No Plan Active',
-        'subtitle': Text(
-          isSubscribed && subscriptionEndDate != null
-              ? 'Ends on ${subscriptionEndDate!.toString().substring(0, 10)}'
-              : 'Subscribe to a plan',
-          style: TextStyle(
-            color: Colors.white.withAlpha(204),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        'title': 'Subscription Status',
         'description': 'Monitor your subscription duration and details.',
         'icon': Iconsax.calendar,
-        'extraWidget': SizedBox(
-          width: 50,
-          height: 50,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CircularProgressIndicator(
-                value: isSubscribed && subscriptionEndDate != null
-                    ? (subscriptionEndDate!.difference(DateTime.now()).inDays /
-                    (subscriptionEndDate!
-                        .difference(
-                      subscriptionEndDate!.subtract(const Duration(days: 28)),
-                    )
-                        .inDays
-                        .abs()))
-                    .clamp(0.0, 1.0)
-                    : 0.0,
-                strokeWidth: 5,
-                backgroundColor: Colors.white.withAlpha(51),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-              ),
-              FittedBox(
-                child: Text(
-                  isSubscribed && subscriptionEndDate != null
-                      ? '${((subscriptionEndDate!.difference(DateTime.now()).inDays / (subscriptionEndDate!.difference(subscriptionEndDate!.subtract(const Duration(days: 28))).inDays.abs())) * 100).round()}%'
-                      : '0%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        'hasExtraWidget': true,
+        'hasReactiveTitle': true,
+        'hasReactiveSubtitle': true,
       },
       {
         'title': 'Student Verification',
-        'subtitle': Text(
-          isStudentVerified ? 'Verified (10% off)' : 'Verify for 10% discount',
-          style: TextStyle(
-            color: Colors.white.withAlpha(204),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
         'description': 'Verify your student status for a 10% discount.',
         'icon': Icons.school,
         'hasNavigation': !isStudentVerified,
       },
       {
         'title': 'Active Address',
-        'subtitle': Text(
-          activeAddress ?? 'Set an address',
-          style: TextStyle(
-            color: Colors.white.withAlpha(204),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
         'description': 'Manage addresses for seamless delivery.',
         'icon': Iconsax.location,
         'hasNavigation': true,
       },
       {
         'title': 'Support Us',
-        'subtitle': Text(
-          'Share feedback & report issues',
-          style: TextStyle(
-            color: Colors.white.withAlpha(204),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
         'description': 'Help us improve by sharing feedback.',
         'icon': Iconsax.heart,
         'hasNavigation': true,
@@ -381,9 +300,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _searchController.text.toLowerCase();
     if (mounted) {
       setState(() {
-        filteredItems = allItems
-            .where((item) => (item['title'] as String).toLowerCase().contains(query))
-            .toList();
+        filteredItems =
+            allItems
+                .where(
+                  (item) =>
+                      (item['title'] as String).toLowerCase().contains(query),
+                )
+                .toList();
       });
     }
   }
@@ -437,7 +360,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       'Hi, $userName!',
                                       style: TextStyle(
                                         color: Colors.blue[900],
-                                        fontSize: MediaQuery.of(context).size.width * 0.07,
+                                        fontSize:
+                                            MediaQuery.of(context).size.width *
+                                            0.07,
                                         fontWeight: FontWeight.w700,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -452,7 +377,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 greeting,
                                 style: TextStyle(
                                   color: Colors.blue[600],
-                                  fontSize: MediaQuery.of(context).size.width * 0.04,
+                                  fontSize:
+                                      MediaQuery.of(context).size.width * 0.04,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
@@ -466,7 +392,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             duration: const Duration(milliseconds: 300),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.blue[200]!, width: 2),
+                              border: Border.all(
+                                color: Colors.blue[200]!,
+                                width: 2,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.blue.withAlpha(26),
@@ -478,9 +407,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: CircleAvatar(
                               radius: 24,
                               backgroundColor: Colors.white,
-                              backgroundImage: _profileImage != null
-                                  ? FileImage(_profileImage!)
-                                  : const AssetImage('assets/profile_pic.jpg') as ImageProvider,
+                              backgroundImage:
+                                  _profileImage != null
+                                      ? FileImage(_profileImage!)
+                                      : const AssetImage(
+                                            'assets/profile_pic.jpg',
+                                          )
+                                          as ImageProvider,
                             ),
                           ),
                         ),
@@ -501,13 +434,20 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search options...',
                     hintStyle: TextStyle(color: Colors.blue[400], fontSize: 16),
-                    prefixIcon: Icon(Iconsax.search_normal, color: Colors.blue[600], size: 20),
+                    prefixIcon: Icon(
+                      Iconsax.search_normal,
+                      color: Colors.blue[600],
+                      size: 20,
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -517,11 +457,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.blue[100]!, width: 1),
+                      borderSide: BorderSide(
+                        color: Colors.blue[100]!,
+                        width: 1,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                      borderSide: BorderSide(
+                        color: Colors.blue[300]!,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -539,7 +485,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = filteredItems[index];
                   return GestureDetector(
-                    onTap: item['hasNavigation'] == true ? () => _navigateToScreen(item['title'] as String) : null,
+                    onTap:
+                        item['hasNavigation'] == true
+                            ? () => _navigateToScreen(item['title'] as String)
+                            : null,
                     child: FlipCard(
                       flipOnTouch: false,
                       direction: FlipDirection.HORIZONTAL,
@@ -547,7 +496,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         duration: const Duration(milliseconds: 300),
                         child: Card(
                           elevation: 4,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           child: Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -564,14 +515,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         if (item['icon'] != null)
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: Colors.white.withAlpha(51),
-                                              borderRadius: BorderRadius.circular(12),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                             child: Icon(
                                               item['icon'] as IconData,
@@ -579,24 +532,52 @@ class _HomeScreenState extends State<HomeScreen> {
                                               size: 24,
                                             ),
                                           ),
-                                        if (item['extraWidget'] != null) Flexible(child: item['extraWidget'] as Widget),
+                                        if (item['hasExtraWidget'] == true)
+                                          _buildExtraWidget(
+                                            item['title'] as String,
+                                          ),
                                       ],
                                     ),
                                     const SizedBox(height: 12),
                                     Flexible(
-                                      child: Text(
-                                        item['title'] as String,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                      child:
+                                          item['hasReactiveTitle'] == true
+                                              ? _buildReactiveTitle(
+                                                item['title'] as String,
+                                              )
+                                              : Text(
+                                                item['title'] as String,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                     ),
                                     const SizedBox(height: 8),
-                                    Flexible(child: item['subtitle'] as Widget),
+                                    Flexible(
+                                      child:
+                                          item['hasReactiveSubtitle'] == true
+                                              ? _buildReactiveSubtitle(
+                                                item['title'] as String,
+                                              )
+                                              : Text(
+                                                _getStaticSubtitle(
+                                                  item['title'] as String,
+                                                ),
+                                                style: TextStyle(
+                                                  color: Colors.white.withAlpha(
+                                                    204,
+                                                  ),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                    ),
                                   ],
                                 ),
                                 if (item['hasNavigation'] == true)
@@ -616,7 +597,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                   )
-                                else if (item['title'] == 'Student Verification' && isStudentVerified)
+                                else if (item['title'] ==
+                                        'Student Verification' &&
+                                    isStudentVerified)
                                   Positioned(
                                     top: 0,
                                     right: 0,
@@ -640,7 +623,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       back: Card(
                         elevation: 4,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -681,12 +666,201 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildExtraWidget(String title) {
+    switch (title) {
+      case 'Pause & Play':
+        return Obx(
+          () => Switch(
+            value: pausePlayController.isPaused.value,
+            onChanged:
+                isSubscribed
+                    ? (value) =>
+                        pausePlayController.togglePausePlay(isSubscribed)
+                    : null,
+            activeColor: Colors.white.withOpacity(0.9),
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: Colors.white.withOpacity(0.2),
+          ),
+        );
+      case 'Today\'s Order':
+        return Obx(
+          () => Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              orderController.todayOrderStatus.value == 'Delivered'
+                  ? Icons.check_circle
+                  : Icons.pending,
+              color: Colors.white.withOpacity(0.9),
+              size: 24,
+            ),
+          ),
+        );
+      case 'Subscription Status':
+        final daysLeft =
+            subscriptionEndDate != null
+                ? subscriptionEndDate!
+                        .difference(DateTime.now())
+                        .inDays
+                        .clamp(0, 28) /
+                    28
+                : 0.0;
+        return SizedBox(
+          width: 50,
+          height: 50,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value: isSubscribed ? daysLeft : 0.0,
+                strokeWidth: 5,
+                backgroundColor: Colors.white.withAlpha(51),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+              ),
+              Text(
+                isSubscribed && subscriptionEndDate != null
+                    ? '${(daysLeft * 100).round()}%'
+                    : '0%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildReactiveTitle(String title) {
+    if (title == 'Subscription Status') {
+      return Obx(() {
+        final endDate =
+            pausePlayController.subscriptionEndDate.value ??
+            subscriptionEndDate;
+        final text =
+            endDate != null && endDate.isAfter(DateTime.now())
+                ? '${endDate.difference(DateTime.now()).inDays} Days Left'
+                : 'No Plan Active';
+        return Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+      });
+    }
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildReactiveSubtitle(String title) {
+    switch (title) {
+      case 'Pause & Play':
+        return Obx(
+          () => Text(
+            isSubscribed
+                ? (DateTime.now().hour >= 9 && DateTime.now().hour < 22
+                    ? (pausePlayController.isPaused.value ? 'Paused' : 'Active')
+                    : 'Switch unavailable now')
+                : 'Not subscribed',
+            style: TextStyle(
+              color: Colors.white.withAlpha(204),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      case 'Today\'s Order':
+        return GetBuilder<OrderController>(
+          builder:
+              (controller) => Text(
+                isSubscribed
+                    ? controller.todayOrderStatus.value.isNotEmpty
+                        ? controller.todayOrderStatus.value
+                        : 'No order today'
+                    : 'Subscribe to see today\'s order',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(204),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+        );
+      case 'Subscription Status':
+        return Obx(
+          () => Text(
+            isSubscribed &&
+                    pausePlayController.subscriptionEndDate.value != null
+                ? 'Ends on ${pausePlayController.subscriptionEndDate.value!.toString().substring(0, 10)}'
+                : 'Subscribe to a plan',
+            style: TextStyle(
+              color: Colors.white.withAlpha(204),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      default:
+        return Text(
+          _getStaticSubtitle(title),
+          style: TextStyle(
+            color: Colors.white.withAlpha(204),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+    }
+  }
+
+  String _getStaticSubtitle(String title) {
+    switch (title) {
+      case 'Student Verification':
+        return isStudentVerified
+            ? 'Verified (10% off)'
+            : 'Verify for 10% discount';
+      case 'Active Address':
+        return activeAddress ?? 'Set an address';
+      case 'Support Us':
+        return 'Share feedback & report issues';
+      default:
+        return '';
+    }
+  }
 }
 
 class LocationDetails {
   final String address;
   const LocationDetails(this.address);
-  factory LocationDetails.fromMap(Map<String, dynamic> map) => LocationDetails(map['address'] ?? '');
+  factory LocationDetails.fromMap(Map<String, dynamic> map) =>
+      LocationDetails(map['address'] ?? '');
   @override
   String toString() => address;
 }

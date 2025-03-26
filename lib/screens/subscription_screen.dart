@@ -210,9 +210,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   'Craft your perfect meal plan',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.white.withAlpha(179),
+                    color: Colors.white.withAlpha(179), // 0.7 -> 179
                     fontStyle: FontStyle.italic,
-                  ), // 0.7 -> 179
+                  ),
                 ),
               ],
             ),
@@ -241,11 +241,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withAlpha(51),
+            color: Colors.grey.withAlpha(51), // 0.2 -> 51
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.2 -> 51
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,9 +255,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.blue[900]!.withAlpha(26),
+                  color: Colors.blue[900]!.withAlpha(26), // 0.1 -> 26
                   shape: BoxShape.circle,
-                ), // 0.1 -> 26
+                ),
                 child: Icon(
                   _getIconForTitle(title),
                   color: Colors.blue[900],
@@ -335,11 +335,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withAlpha(51),
+            color: Colors.blue.withAlpha(51), // 0.2 -> 51
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.2 -> 51
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

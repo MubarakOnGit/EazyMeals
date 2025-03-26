@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Correct import
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import '../utils/menu_utils.dart'; // Adjust path
+import '../utils/menu_utils.dart';
 import '../controllers/pause_play_controller.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -66,7 +66,6 @@ class _MenuScreenState extends State<MenuScreen> {
       0,
       dates.length - 1,
     );
-
     if (newIndex != _currentDayIndex) {
       _currentDayIndex = newIndex;
       _currentDate = DateTime.now()
@@ -131,32 +130,64 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Future<void> _loadInitialState() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && mounted) {
-          final data = doc.data() ?? {};
-          setState(() {
-            _activeSubscription = data['activeSubscription'] ?? false;
-            _subscriptionStartDate =
-                data['subscriptionStartDate'] != null
-                    ? (data['subscriptionStartDate'] as Timestamp).toDate()
-                    : null;
-            if (_activeSubscription &&
-                pausePlayController.subscriptionEndDate.value != null) {
-              _remainingSeconds =
-                  pausePlayController.subscriptionEndDate.value!
-                      .difference(DateTime.now())
-                      .inSeconds;
-              if (_remainingSeconds > 0 && !pausePlayController.isPaused.value)
-                _startTimer();
-            }
-          });
-        }
-      } catch (e) {
-        print('Error loading initial state: $e');
-      }
+    if (user == null) {
+      print('No authenticated user found');
+      return;
     }
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        final data = doc.data() ?? {};
+        print('Full Firestore data: $data');
+        setState(() {
+          print('Raw activeSubscription: ${data['activeSubscription']}');
+          _activeSubscription =
+              data['activeSubscription'] is bool
+                  ? data['activeSubscription'] as bool
+                  : false;
+          print('Raw subscriptionStartDate: ${data['subscriptionStartDate']}');
+          _subscriptionStartDate = _parseTimestamp(
+            data['subscriptionStartDate'],
+          );
+          print('Processed subscriptionStartDate: $_subscriptionStartDate');
+          if (_activeSubscription &&
+              pausePlayController.subscriptionEndDate.value != null) {
+            print(
+              'Raw subEndDate from controller: ${pausePlayController.subscriptionEndDate.value}',
+            );
+            _remainingSeconds =
+                pausePlayController.subscriptionEndDate.value!
+                    .difference(DateTime.now())
+                    .inSeconds;
+            print('Remaining seconds: $_remainingSeconds');
+            if (_remainingSeconds > 0 && !pausePlayController.isPaused.value)
+              _startTimer();
+          }
+        });
+      } else {
+        print('No user document found or widget unmounted');
+      }
+    } catch (e) {
+      print(
+        'Error loading initial state: $e - Stack trace: ${StackTrace.current}',
+      );
+      rethrow;
+    }
+  }
+
+  DateTime? _parseTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is Map<String, dynamic> &&
+        value.containsKey('seconds') &&
+        value.containsKey('nanoseconds')) {
+      return Timestamp(
+        value['seconds'] as int,
+        value['nanoseconds'] as int,
+      ).toDate();
+    }
+    print('Unexpected timestamp format: $value');
+    return null;
   }
 
   Future<void> _loadProfileImage() async {
@@ -399,192 +430,189 @@ class _MenuScreenState extends State<MenuScreen> {
                             width: 1,
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: GetBuilder<PausePlayController>(
+                          builder: (controller) {
+                            final isPaused = controller.isPaused.value;
+                            final subEndDate =
+                                controller.subscriptionEndDate.value;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue[700]!.withAlpha(
-                                            51,
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[700]!
+                                                  .withAlpha(51),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.subscriptions,
+                                              color: Colors.blue[800],
+                                              size: 20,
+                                            ),
                                           ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.subscriptions,
-                                          color: Colors.blue[800],
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Flexible(
-                                        child: Text(
-                                          'Your Subscription',
-                                          style: TextStyle(
-                                            color: Colors.blue[900],
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap:
-                                      () => pausePlayController.togglePausePlay(
-                                        _activeSubscription,
-                                      ),
-                                  child: Obx(
-                                    () => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            pausePlayController.isPaused.value
-                                                ? Colors.red[600]
-                                                : Colors.green[600],
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: (pausePlayController
-                                                        .isPaused
-                                                        .value
-                                                    ? Colors.red
-                                                    : Colors.green)
-                                                .withAlpha(77),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
+                                          const SizedBox(width: 12),
+                                          Flexible(
+                                            child: Text(
+                                              'Your Subscription',
+                                              style: TextStyle(
+                                                color: Colors.blue[900],
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ],
                                       ),
-                                      child: Text(
-                                        pausePlayController.isPaused.value
-                                            ? 'Resume'
-                                            : 'Pause',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
+                                    ),
+                                    GestureDetector(
+                                      onTap:
+                                          () => controller.togglePausePlay(
+                                            _activeSubscription,
+                                          ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              isPaused
+                                                  ? Colors.red[600]
+                                                  : Colors.green[600],
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: (isPaused
+                                                      ? Colors.red
+                                                      : Colors.green)
+                                                  .withAlpha(77),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          isPaused ? 'Resume' : 'Pause',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.play_circle_outline,
-                                  color: Colors.blue[700],
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Start: ${_formatDate(_subscriptionStartDate)}',
-                                    style: TextStyle(
-                                      color: Colors.blue[800],
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.play_circle_outline,
+                                      color: Colors.blue[700],
+                                      size: 20,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.stop_circle_outlined,
-                                  color: Colors.blue[700],
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Obx(
-                                    () => Text(
-                                      'End: ${_formatDate(pausePlayController.subscriptionEndDate.value)}',
-                                      style: TextStyle(
-                                        color: Colors.blue[800],
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Start: ${_formatDate(_subscriptionStartDate)}',
+                                        style: TextStyle(
+                                          color: Colors.blue[800],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.hourglass_empty,
-                                  color: Colors.blue[700],
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Remaining: ${_remainingSeconds > 0 ? _formatRemainingDays(_remainingSeconds) : 'Expired'}',
-                                    style: TextStyle(
-                                      color: Colors.blue[800],
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.stop_circle_outlined,
+                                      color: Colors.blue[700],
+                                      size: 20,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Obx(
-                                  () => Icon(
-                                    pausePlayController.isPaused.value
-                                        ? Icons.pause_circle_outline
-                                        : Icons.play_circle_filled,
-                                    color:
-                                        pausePlayController.isPaused.value
-                                            ? Colors.red[600]
-                                            : Colors.green[600],
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Obx(
-                                    () => Text(
-                                      'Status: ${pausePlayController.isPaused.value ? 'Paused' : 'Ongoing'}',
-                                      style: TextStyle(
-                                        color:
-                                            pausePlayController.isPaused.value
-                                                ? Colors.red[600]
-                                                : Colors.green[600],
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'End: ${_formatDate(subEndDate)}',
+                                        style: TextStyle(
+                                          color: Colors.blue[800],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.hourglass_empty,
+                                      color: Colors.blue[700],
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Remaining: ${_remainingSeconds > 0 ? _formatRemainingDays(_remainingSeconds) : 'Expired'}',
+                                        style: TextStyle(
+                                          color: Colors.blue[800],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      isPaused
+                                          ? Icons.pause_circle_outline
+                                          : Icons.play_circle_filled,
+                                      color:
+                                          isPaused
+                                              ? Colors.red[600]
+                                              : Colors.green[600],
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Status: ${isPaused ? 'Paused' : 'Ongoing'}',
+                                        style: TextStyle(
+                                          color:
+                                              isPaused
+                                                  ? Colors.red[600]
+                                                  : Colors.green[600],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ],
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -961,7 +989,7 @@ class _MenuImageWidget extends StatefulWidget {
 }
 
 class _MenuImageWidgetState extends State<_MenuImageWidget> {
-  final storage = const FlutterSecureStorage(); // Correct instantiation
+  final storage = const FlutterSecureStorage();
 
   Future<String?> _getLocalImagePath(String url, String key) async {
     if (url.isEmpty) return null;
