@@ -24,16 +24,59 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isActiveSubscription = false;
   bool _isLoading = true;
 
-  static const Map<String, double> _mealPrices = {
-    'Lunch': 100.0,
-    'Dinner': 120.0,
-    'Both': 200.0,
-  };
-
-  static const Map<String, double> _planMultipliers = {
-    '1 Week': 1.0,
-    '3 Weeks': 2.7, // 10% discount for 3 weeks
-    '4 Weeks': 3.4, // 15% discount for 4 weeks
+  // Updated price structure with exact prices
+  static const Map<String, Map<String, Map<String, double>>> _mealPrices = {
+    'Veg': {
+      '1 Week': {
+        'Lunch': 21.5,
+        'Dinner': 21.5,
+        'Both': 35.0,
+      },
+      '2 Weeks': {
+        'Lunch': 35.0,
+        'Dinner': 35.0,
+        'Both': 60.0,
+      },
+      '4 Weeks': {
+        'Lunch': 60.0,
+        'Dinner': 60.0,
+        'Both': 110.0,
+      },
+    },
+    'South Indian': {
+      '1 Week': {
+        'Lunch': 22.5,
+        'Dinner': 22.5,
+        'Both': 37.5,
+      },
+      '2 Weeks': {
+        'Lunch': 37.5,
+        'Dinner': 37.5,
+        'Both': 65.0,
+      },
+      '4 Weeks': {
+        'Lunch': 65.0,
+        'Dinner': 65.0,
+        'Both': 120.0,
+      },
+    },
+    'North Indian': {
+      '1 Week': {
+        'Lunch': 22.5,
+        'Dinner': 22.5,
+        'Both': 37.5,
+      },
+      '2 Weeks': {
+        'Lunch': 37.5,
+        'Dinner': 37.5,
+        'Both': 65.0,
+      },
+      '4 Weeks': {
+        'Lunch': 65.0,
+        'Dinner': 65.0,
+        'Both': 120.0,
+      },
+    },
   };
 
   @override
@@ -62,17 +105,38 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   void _updatePrice() {
-    _price = _mealPrices[_selectedMealType]! * _planMultipliers[_selectedPlan]!;
-    if (_isStudentVerified) _price *= 0.9; // Apply 10% student discount
+    // Get price based on category, plan, and meal type
+    final categoryPrices = _mealPrices[_selectedCategory];
+    if (categoryPrices == null) {
+      _price = 0.0;
+      return;
+    }
+
+    final planPrices = categoryPrices[_selectedPlan];
+    if (planPrices == null) {
+      _price = 0.0;
+      return;
+    }
+
+    final mealType = _selectedMealType == 'Both' ? 'Both' : 'Lunch';
+    final price = planPrices[mealType];
+    if (price == null) {
+      _price = 0.0;
+      return;
+    }
+
+    _price = price;
+
+    // Apply only student discount (10%)
+    if (_isStudentVerified) _price *= 0.9;
   }
 
   Future<void> _proceedToWhatsApp() async {
     if (_isActiveSubscription || _auth.currentUser == null) return;
 
     final user = _auth.currentUser!;
-    final orderId = _uuid.v4(); // Single order ID for the subscription request
+    final orderId = _uuid.v4();
 
-    // Construct the WhatsApp message
     final message =
         'Subscription Request\n'
             'Order ID: $orderId\n'
@@ -85,7 +149,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ? '\nNote: Includes separate Lunch and Dinner orders daily'
             : '');
 
-    // Save a single pending subscription request
     await _firestore
         .collection('users')
         .doc(user.uid)
@@ -95,14 +158,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           'orderId': orderId,
           'subscriptionPlan': _selectedPlan,
           'category': _selectedCategory,
-          'mealType':
-              _selectedMealType, // Keep as "Both" to indicate dual orders
+          'mealType': _selectedMealType,
           'amount': _price,
           'createdAt': Timestamp.now(),
           'status': 'Pending Payment',
         });
 
-    // Launch WhatsApp
     final whatsappUrl =
         'https://wa.me/+995500900095?text=${Uri.encodeComponent(message)}';
     if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
@@ -164,7 +225,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           _buildDropdownCard(
                             'Plan Duration',
                             'Pick your subscription length',
-                            const ['1 Week', '3 Weeks', '4 Weeks'],
+                            const ['1 Week', '2 Weeks', '4 Weeks'],
                             _selectedPlan,
                             (val) => _selectedPlan = val,
                           ),
@@ -224,7 +285,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     fontSize: 16,
                     color: Colors.white.withAlpha(179),
                     fontStyle: FontStyle.italic,
-                  ), // 0.7 -> 179
+                  ),
                 ),
               ],
             ),
@@ -257,7 +318,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.2 -> 51
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,7 +330,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 decoration: BoxDecoration(
                   color: Colors.blue[900]!.withAlpha(26),
                   shape: BoxShape.circle,
-                ), // 0.1 -> 26
+                ),
                 child: Icon(
                   _getIconForTitle(title),
                   color: Colors.blue[900],
@@ -351,7 +412,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.2 -> 51
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -375,7 +436,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.white.withAlpha(179),
-                ), // 0.7 -> 179
+                ),
               ),
             ],
           ),
@@ -407,7 +468,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             elevation: 8,
-            shadowColor: Colors.blue.withAlpha(77), // 0.3 -> 77
+            shadowColor: Colors.blue.withAlpha(77),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

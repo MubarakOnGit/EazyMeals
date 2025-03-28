@@ -6,9 +6,8 @@ import 'dart:convert';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
 
-// Basic Location Details (unchanged)
+// Basic Location Details
 class LocationDetails {
   final double latitude;
   final double longitude;
@@ -45,7 +44,7 @@ class LocationDetails {
   );
 }
 
-// Enhanced Location Details (unchanged)
+// Enhanced Location Details with isActive
 class EnhancedLocationDetails {
   final LocationDetails location;
   final String addressType;
@@ -56,6 +55,7 @@ class EnhancedLocationDetails {
   final String? additionalInfo;
   final double entranceLatitude;
   final double entranceLongitude;
+  final bool isActive;
 
   EnhancedLocationDetails({
     required this.location,
@@ -67,6 +67,7 @@ class EnhancedLocationDetails {
     this.additionalInfo,
     required this.entranceLatitude,
     required this.entranceLongitude,
+    this.isActive = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -79,6 +80,7 @@ class EnhancedLocationDetails {
     'additionalInfo': additionalInfo,
     'entranceLatitude': entranceLatitude,
     'entranceLongitude': entranceLongitude,
+    'isActive': isActive,
   };
 
   factory EnhancedLocationDetails.fromMap(Map<String, dynamic> map) {
@@ -94,11 +96,12 @@ class EnhancedLocationDetails {
       additionalInfo: map['additionalInfo'] as String?,
       entranceLatitude: map['entranceLatitude'] as double,
       entranceLongitude: map['entranceLongitude'] as double,
+      isActive: map['isActive'] as bool? ?? false,
     );
   }
 }
 
-// Custom Map Screen (unchanged)
+// Custom Map Screen
 class CustomMapScreen extends StatefulWidget {
   const CustomMapScreen({super.key});
 
@@ -112,7 +115,8 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
   LatLng? _currentLocation;
   LocationDetails? _currentAddressDetails;
   bool _isLoading = true;
-  static const String _placesApiKey = 'YOUR_GOOGLE_PLACES_API_KEY';
+  static const String _placesApiKey =
+      'YOUR_GOOGLE_PLACES_API_KEY'; // Taken from your code
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
@@ -603,7 +607,7 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
   }
 }
 
-// Address Details Screen (Improved Text Fields)
+// Address Details Screen
 class AddressDetailsScreen extends StatefulWidget {
   final LocationDetails location;
   const AddressDetailsScreen({super.key, required this.location});
@@ -651,6 +655,9 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
   }
 
   void _saveAddress() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     final enhancedLocation = EnhancedLocationDetails(
       location: widget.location,
       addressType:
@@ -667,16 +674,24 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
               : _additionalController.text.trim(),
       entranceLatitude: _entranceLocation!.latitude,
       entranceLongitude: _entranceLocation!.longitude,
+      isActive: true,
     );
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'activeAddress': enhancedLocation.toMap(),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      final addressesRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('addresses');
+
+      // Deactivate existing active address
+      final activeAddresses =
+          await addressesRef.where('isActive', isEqualTo: true).get();
+      for (var doc in activeAddresses.docs) {
+        await doc.reference.update({'isActive': false});
       }
+
+      // Add new address
+      await addressesRef.add(enhancedLocation.toMap());
       Navigator.pop(context, enhancedLocation);
     } catch (e) {
       ScaffoldMessenger.of(
@@ -1075,7 +1090,7 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
   }
 }
 
-// Address Management Screen (Improved Card Readability)
+// Address Management Screen
 class AddressManagementScreen extends StatefulWidget {
   const AddressManagementScreen({super.key});
 
@@ -1088,9 +1103,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<EnhancedLocationDetails> _addresses = [];
-  EnhancedLocationDetails? _activeAddress;
   bool _isLoading = true;
-  static const String _localStorageKey = 'user_addresses';
 
   @override
   void initState() {
@@ -1104,43 +1117,20 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
 
     try {
       setState(() => _isLoading = true);
+      final snapshot =
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('addresses')
+              .get();
 
-      final prefs = await SharedPreferences.getInstance();
-      final addressesJson = prefs.getString(_localStorageKey);
-      if (addressesJson != null) {
-        final List<dynamic> addressesList = json.decode(addressesJson);
+      setState(() {
         _addresses =
-            addressesList
-                .map(
-                  (addr) => EnhancedLocationDetails.fromMap(
-                    addr as Map<String, dynamic>,
-                  ),
-                )
+            snapshot.docs
+                .map((doc) => EnhancedLocationDetails.fromMap(doc.data()))
                 .toList();
-      }
-
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists &&
-          doc.data() != null &&
-          doc.data()!['activeAddress'] != null) {
-        final activeAddr = EnhancedLocationDetails.fromMap(
-          doc.data()!['activeAddress'] as Map<String, dynamic>,
-        );
-        final exists = _addresses.any(
-          (addr) =>
-              addr.location.address == activeAddr.location.address &&
-              addr.addressType == activeAddr.addressType &&
-              addr.buildingName == activeAddr.buildingName &&
-              addr.phoneNumber == activeAddr.phoneNumber,
-        );
-        if (!exists) {
-          _addresses.add(activeAddr);
-          await _saveAddressesToLocalStorage();
-        }
-        _activeAddress = activeAddr;
-      }
-
-      setState(() => _isLoading = false);
+        _isLoading = false;
+      });
     } catch (e) {
       print('Error loading addresses: $e');
       setState(() => _isLoading = false);
@@ -1150,70 +1140,41 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     }
   }
 
-  Future<void> _saveAddressesToLocalStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final nonActiveAddresses =
-          _addresses.where((addr) => addr != _activeAddress).toList();
-      final addressesJson = json.encode(
-        nonActiveAddresses.map((addr) => addr.toMap()).toList(),
-      );
-      await prefs.setString(_localStorageKey, addressesJson);
-    } catch (e) {
-      print('Error saving addresses to local storage: $e');
-    }
-  }
-
-  Future<void> _updateActiveAddressInFirestore() async {
-    final user = _auth.currentUser;
-    if (user == null || _activeAddress == null) return;
-
-    try {
-      await _firestore.collection('users').doc(user.uid).set({
-        'activeAddress': _activeAddress!.toMap(),
-        'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await _saveAddressesToLocalStorage();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update active address: $e')),
-      );
-    }
-  }
-
   Future<void> _addAddressFromMap() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const CustomMapScreen()),
     );
     if (result != null && result is EnhancedLocationDetails && mounted) {
-      setState(() {
-        _addresses.add(result);
-        _activeAddress = result;
-      });
-      await _updateActiveAddressInFirestore();
+      setState(() => _addresses.add(result));
+      await _loadAddresses(); // Reload to ensure consistency
     }
   }
 
   Future<void> _deleteAddress(int index) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
     try {
+      final addressToDelete = _addresses[index];
+      final snapshot =
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('addresses')
+              .where('phoneNumber', isEqualTo: addressToDelete.phoneNumber)
+              .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        await snapshot.docs.first.reference.delete();
+      }
+
       setState(() {
-        final wasActive = _activeAddress == _addresses[index];
         _addresses.removeAt(index);
-        if (wasActive) {
-          _activeAddress = _addresses.isNotEmpty ? _addresses.first : null;
-          if (_activeAddress != null) {
-            _updateActiveAddressInFirestore();
-          } else {
-            final user = _auth.currentUser;
-            if (user != null)
-              _firestore.collection('users').doc(user.uid).update({
-                'activeAddress': null,
-              });
-          }
+        if (addressToDelete.isActive && _addresses.isNotEmpty) {
+          _setActiveAddress(_addresses.first);
         }
       });
-      await _saveAddressesToLocalStorage();
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -1222,9 +1183,50 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
   }
 
   Future<void> _setActiveAddress(EnhancedLocationDetails address) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
     try {
-      setState(() => _activeAddress = address);
-      await _updateActiveAddressInFirestore();
+      final addressesRef = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('addresses');
+
+      // Deactivate all addresses
+      final activeAddresses =
+          await addressesRef.where('isActive', isEqualTo: true).get();
+      for (var doc in activeAddresses.docs) {
+        await doc.reference.update({'isActive': false});
+      }
+
+      // Set the selected address as active
+      final snapshot =
+          await addressesRef
+              .where('phoneNumber', isEqualTo: address.phoneNumber)
+              .get();
+      if (snapshot.docs.isNotEmpty) {
+        await snapshot.docs.first.reference.update({'isActive': true});
+      }
+
+      setState(() {
+        _addresses =
+            _addresses
+                .map(
+                  (addr) => EnhancedLocationDetails(
+                    location: addr.location,
+                    addressType: addr.addressType,
+                    buildingName: addr.buildingName,
+                    floorNumber: addr.floorNumber,
+                    doorNumber: addr.doorNumber,
+                    phoneNumber: addr.phoneNumber,
+                    additionalInfo: addr.additionalInfo,
+                    entranceLatitude: addr.entranceLatitude,
+                    entranceLongitude: addr.entranceLongitude,
+                    isActive: addr.phoneNumber == address.phoneNumber,
+                  ),
+                )
+                .toList();
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to set active address: $e')),
@@ -1508,7 +1510,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
   }
 
   Widget _buildAddressCard(EnhancedLocationDetails address, int index) {
-    final isActive = _activeAddress == address;
+    final isActive = address.isActive;
     IconData typeIcon =
         address.addressType == 'house'
             ? Icons.house

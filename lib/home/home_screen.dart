@@ -33,8 +33,8 @@ class _HomeScreenState extends BaseState<HomeScreen> {
   List<Map<String, dynamic>> allItems = [];
   List<Map<String, dynamic>> filteredItems = [];
   String todayOrderStatus = 'No Order';
-  EnhancedLocationDetails?
-  _activeEnhancedAddress; // Internal variable for full address details
+  EnhancedLocationDetails? _activeEnhancedAddress;
+  bool _isStudentVerified = false;
 
   @override
   void initState() {
@@ -43,16 +43,15 @@ class _HomeScreenState extends BaseState<HomeScreen> {
     _setGreeting();
     profileController.loadProfileImage();
     _loadUserName();
-    _loadActiveAddress(); // Load active address
+    _loadActiveAddress();
     _initializeItems();
   }
 
   @override
-  String? get activeAddress => _activeEnhancedAddress?.location.address; // Override BaseState getter
+  String? get activeAddress => _activeEnhancedAddress?.location.address;
 
   @override
   set activeAddress(String? value) {
-    // Override BaseState setter (optional: update _activeEnhancedAddress if needed)
     if (value != null && _activeEnhancedAddress != null) {
       _activeEnhancedAddress = EnhancedLocationDetails(
         location: LocationDetails(
@@ -198,11 +197,13 @@ class _HomeScreenState extends BaseState<HomeScreen> {
   void _togglePausePlay(bool subscribed) async {
     if (!subscribed ||
         subscriptionStartDate == null ||
-        DateTime.now().isBefore(subscriptionStartDate!))
+        DateTime.now().isBefore(subscriptionStartDate!)) {
       return;
+    }
     final now = DateTime.now();
-    if (now.hour < 9 || now.hour >= 22)
-      return; // Only allow between 9 AM - 10 PM
+    if (now.hour < 9 || now.hour >= 22) {
+      return; // Prevent toggling between 10 PM - 9 AM
+    }
 
     await pausePlayController.togglePausePlay(subscribed);
   }
@@ -335,38 +336,37 @@ class _HomeScreenState extends BaseState<HomeScreen> {
                         ),
                         Flexible(
                           flex: 1,
-                          child: GetX<ProfileController>(
-                            builder:
-                                (controller) => AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.blue[200]!,
-                                      width: 2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.blue.withAlpha(26),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor: Colors.white,
-                                    backgroundImage:
-                                        controller.profileImage.value != null
-                                            ? FileImage(
-                                              controller.profileImage.value!,
-                                            )
-                                            : const AssetImage(
-                                                  'assets/profile_pic.jpg',
-                                                )
-                                                as ImageProvider,
-                                  ),
+                          child: Obx(
+                            () => AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.blue[200]!,
+                                  width: 2,
                                 ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.blue.withAlpha(26),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Colors.white,
+                                backgroundImage:
+                                    profileController.profileImage.value != null
+                                        ? FileImage(
+                                          profileController.profileImage.value!,
+                                        )
+                                        : const AssetImage(
+                                              'assets/profile_pic.jpg',
+                                            )
+                                            as ImageProvider,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -502,16 +502,30 @@ class _HomeScreenState extends BaseState<HomeScreen> {
 
     switch (title) {
       case 'Pause & Play':
-        return Obx(
-          () => Switch(
-            value: pausePlayController.isPaused.value,
-            onChanged:
-                (value) => pausePlayController.togglePausePlay(isSubscribed),
+        final now = DateTime.now();
+        final isOutsideHours = now.hour < 9 || now.hour >= 22;
+        if (isOutsideHours) {
+          // Static widget during 10 PM - 9 AM
+          return Switch(
+            value: pausePlayController.isPaused.value, // Last known state
+            onChanged: null, // Disabled
             activeColor: Colors.white.withOpacity(0.9),
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.white.withOpacity(0.2),
-          ),
-        );
+          );
+        } else {
+          // Reactive widget outside 10 PM - 9 AM
+          return Obx(
+            () => Switch(
+              value: pausePlayController.isPaused.value,
+              onChanged:
+                  (value) => pausePlayController.togglePausePlay(isSubscribed),
+              activeColor: Colors.white.withOpacity(0.9),
+              inactiveThumbColor: Colors.white,
+              inactiveTrackColor: Colors.white.withOpacity(0.2),
+            ),
+          );
+        }
       case 'Today\'s Order':
         return Obx(
           () => Container(
@@ -665,20 +679,35 @@ class _HomeScreenState extends BaseState<HomeScreen> {
 
     switch (title) {
       case 'Pause & Play':
-        return Obx(
-          () => Text(
-            DateTime.now().hour >= 9 && DateTime.now().hour < 22
-                ? (pausePlayController.isPaused.value ? 'Paused' : 'Active')
-                : 'Switch unavailable now',
-            style: const TextStyle(
+        final now = DateTime.now();
+        final isOutsideHours = now.hour < 9 || now.hour >= 22;
+        if (isOutsideHours) {
+          // Static text during 10 PM - 9 AM
+          return const Text(
+            'Cannot switch between 10pm - 9am',
+            style: TextStyle(
               color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-          ),
-        );
+          );
+        } else {
+          // Reactive text outside 10 PM - 9 AM
+          return Obx(
+            () => Text(
+              pausePlayController.isPaused.value ? 'Paused' : 'Active',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }
       case 'Today\'s Order':
         return Obx(
           () => Text(
@@ -743,7 +772,7 @@ class _HomeScreenState extends BaseState<HomeScreen> {
             ? 'Verified (10% off)'
             : 'Verify for 10% discount';
       case 'Active Address':
-        return activeAddress ?? 'Set an address'; // Uses BaseState's getter
+        return activeAddress ?? 'Set an address';
       case 'Support Us':
         return 'Share feedback & report issues';
       default:
@@ -752,9 +781,17 @@ class _HomeScreenState extends BaseState<HomeScreen> {
   }
 
   Widget _buildGridItem(Map<String, dynamic> item) {
+    final now = DateTime.now();
+    final isOutsideHours = now.hour < 9 || now.hour >= 22;
+    final isPausePlayRestricted =
+        item['title'] == 'Pause & Play' && isSubscribed && isOutsideHours;
+
     return GestureDetector(
       onTap:
-          item['hasNavigation'] == true
+          (item['title'] == 'Student Verification' && isStudentVerified) ||
+                  isPausePlayRestricted
+              ? null
+              : item['hasNavigation'] == true
               ? () => _navigateToScreen(item['title'] as String)
               : null,
       child: FlipCard(
@@ -812,7 +849,9 @@ class _HomeScreenState extends BaseState<HomeScreen> {
                       ),
                     ],
                   ),
-                  if (item['hasNavigation'] == true)
+                  if (item['hasNavigation'] == true &&
+                      !(item['title'] == 'Student Verification' &&
+                          isStudentVerified))
                     Positioned(
                       top: 0,
                       right: 0,
@@ -873,7 +912,12 @@ class _HomeScreenState extends BaseState<HomeScreen> {
               children: [
                 Flexible(
                   child: Text(
-                    item['description'] as String,
+                    item['title'] == 'Pause & Play' &&
+                            isSubscribed &&
+                            (DateTime.now().hour < 9 ||
+                                DateTime.now().hour >= 22)
+                        ? 'Cannot switch pause or play between these times'
+                        : item['description'] as String,
                     style: TextStyle(
                       color: Colors.white.withAlpha(230),
                       fontSize: 14,
@@ -890,9 +934,90 @@ class _HomeScreenState extends BaseState<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildStudentCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[900]!, Colors.blue[700]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withAlpha(51),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(context, '/student-verification'),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(26),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isStudentVerified ? Icons.verified : Icons.school,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isStudentVerified
+                            ? 'Student Verified'
+                            : 'Student Verification',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isStudentVerified
+                            ? 'Your student status has been verified'
+                            : 'Verify your student status to get 10% discount',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withAlpha(179),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  _isStudentVerified
+                      ? Icons.check_circle
+                      : Icons.arrow_forward_ios,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// Enhanced Location Details
 class EnhancedLocationDetails {
   final LocationDetails location;
   final String addressType;
@@ -945,7 +1070,6 @@ class EnhancedLocationDetails {
   }
 }
 
-// Location Details
 class LocationDetails {
   final double latitude;
   final double longitude;

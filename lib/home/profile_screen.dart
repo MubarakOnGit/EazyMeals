@@ -52,7 +52,8 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
             _phoneNumber = data['phoneNumber'] ?? '';
             _nameController.text = _userName;
             _phoneController.text = _phoneNumber;
-            _isVerified = data['studentDetails']?['isVerified'] as bool? ?? false;
+            _isVerified =
+                data['studentDetails']?['isVerified'] as bool? ?? false;
             _activeAddress = data['activeAddress'] ?? 'Manage your addresses';
           });
         }
@@ -67,7 +68,9 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
   Future<void> _pickProfileImage() async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
       if (pickedFile != null) {
         await profileController.updateProfileImage(File(pickedFile.path));
       }
@@ -94,9 +97,9 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not launch email')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not launch email')));
     }
   }
 
@@ -136,7 +139,8 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
     if (!mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder:
+          (_) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -168,7 +172,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                   ),
                 ),
                 onPressed: () => Navigator.pop(context, true),
-            child: const Text('Logout'),
+                child: const Text('Logout'),
               ),
             ],
           ),
@@ -267,10 +271,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
         return;
       }
       try {
-        await firestore
-            .collection('users')
-            .doc(currentUser!.uid)
-            .update({
+        await firestore.collection('users').doc(currentUser!.uid).update({
               'name': _nameController.text.trim(),
               'phoneNumber': _phoneController.text.trim(),
             });
@@ -344,7 +345,8 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: _isLoading
+      body:
+          _isLoading
               ? Center(
                 child: CircularProgressIndicator(color: Colors.blue[900]),
               )
@@ -356,7 +358,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                         colors: [
                           Colors.blue[900]!.withAlpha(13),
                           backgroundColor,
-                      ],
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -388,9 +390,12 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                               children: [
                                 GestureDetector(
                                   onTap: _pickProfileImage,
-                                child: GetX<ProfileController>(
-                                  builder: (controller) => AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
+                                  child: GetX<ProfileController>(
+                                    builder:
+                                        (controller) => AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 300,
+                                          ),
                                     curve: Curves.easeInOut,
                                     width: 120,
                                     height: 120,
@@ -402,15 +407,27 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withAlpha(51),
+                                                color: Colors.black.withAlpha(
+                                                  51,
+                                                ),
                                           blurRadius: 10,
                                           offset: const Offset(0, 4),
                                         ),
-                                      ],
+                                            ],
                                       image: DecorationImage(
-                                        image: controller.profileImage.value != null
-                                            ? FileImage(controller.profileImage.value!)
-                                            : const AssetImage('assets/profile_pic.jpg')
+                                        image:
+                                                  controller
+                                                              .profileImage
+                                                              .value !=
+                                                          null
+                                                      ? FileImage(
+                                                        controller
+                                                            .profileImage
+                                                            .value!,
+                                                      )
+                                                : const AssetImage(
+                                                      'assets/profile_pic.jpg',
+                                                    )
                                                     as ImageProvider,
                                         fit: BoxFit.cover,
                                       ),
@@ -432,7 +449,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                                           Icons.camera_alt,
                                           color: Colors.white,
                                           size: 18,
-                                        ),
+                                              ),
                                         ),
                                       ),
                                     ),
@@ -449,12 +466,12 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                                   ),
                                 ),
                                 Text(
-                                currentUser?.email ?? '',
+                                  currentUser?.email ?? '',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.white.withAlpha(179),
                                     fontStyle: FontStyle.italic,
-                                ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -489,25 +506,39 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                                 icon: Icons.restaurant_menu,
                                 title: 'Meal Plan',
                                 subtitle: 'Premium Weekly Subscription',
-                              onTap: () => _navigateToMealPreferences(context),
+                                onTap:
+                                    () => _navigateToMealPreferences(context),
                               ),
                               ProfileCard(
                                 icon: Icons.location_on,
                                 title: 'Address',
                                 subtitle: _activeAddress,
-                              onTap: () => Navigator.push(
+                                onTap:
+                                    () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                  builder: (_) => const AddressManagementScreen(),
+                                        builder:
+                                            (_) =>
+                                                const AddressManagementScreen(),
                                       ),
                                     ).then((_) => _loadUserData()),
                               ),
                               ProfileCard(
                                 icon: Icons.school,
-                              title: _isVerified ? 'Verified Student Discount' : 'Student Discount',
-                              subtitle: _isVerified ? '10% discount activated' : 'Verify for 10% off',
-                              onTap: _isVerified ? null : _showVerificationSurvey,
-                              trailing: _isVerified
+                                title:
+                                    _isVerified
+                                        ? 'Verified Student Discount'
+                                        : 'Student Discount',
+                                subtitle:
+                                    _isVerified
+                                        ? '10% discount activated'
+                                        : 'Verify for 10% off',
+                                onTap:
+                                    _isVerified
+                                        ? null
+                                        : _showVerificationSurvey,
+                                trailing:
+                                    _isVerified
                                         ? const Icon(
                                           Icons.check_circle,
                                           color: Colors.green,
@@ -540,7 +571,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                                 icon: Icons.admin_panel_settings,
                                 title: 'Employee Login',
                                 subtitle: 'Access admin features',
-                              onTap: () => _navigateToEmployeeLogin(context),
+                                onTap: () => _navigateToEmployeeLogin(context),
                               ),
                               ProfileCard(
                                 icon: Icons.logout,
@@ -589,7 +620,7 @@ class ProfileCard extends StatelessWidget {
           colors:
               onTap != null
                   ? [Colors.blue[900]!, Colors.blue[700]!]
-                  : [Colors.grey[700]!, Colors.grey[600]!],
+                  : [Colors.blue[900]!, Colors.blue[700]!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
