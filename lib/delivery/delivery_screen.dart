@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'orders_screen.dart';
-import 'history_screen.dart';
 import 'profile_screen.dart';
 import 'dart:async';
 
@@ -167,21 +166,16 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
         print('Verification passed, showing main screen for ${widget.email}');
         final List<Widget> _screens = [
           DeliveryOrdersScreen(email: widget.email),
-          DeliveryHistoryScreen(email: widget.email),
           DeliveryProfileScreen(email: widget.email),
         ];
 
         return Scaffold(
           body: _screens[_selectedIndex],
           bottomNavigationBar: BottomNavigationBar(
-            items: [
+            items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.delivery_dining),
                 label: 'Orders',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.history),
-                label: 'History',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.person),

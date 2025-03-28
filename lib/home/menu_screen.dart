@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Correct import
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../utils/menu_utils.dart'; // Adjust path
 import '../controllers/pause_play_controller.dart';
+import 'base_state.dart';
+import '../controllers/profile_controller.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -17,13 +19,13 @@ class MenuScreen extends StatefulWidget {
   State<MenuScreen> createState() => _MenuScreenState();
 }
 
-class _MenuScreenState extends State<MenuScreen> {
+class _MenuScreenState extends BaseState<MenuScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final ScrollController _scrollController = ScrollController();
-  final PausePlayController pausePlayController =
-      Get.find<PausePlayController>();
-  DateTime _currentDate = DateTime.now();
+  late final ScrollController _scrollController;
+  final PausePlayController pausePlayController = Get.find<PausePlayController>();
+  final ProfileController profileController = Get.find<ProfileController>();
+  DateTime _baseDate = DateTime.now().subtract(const Duration(days: 7));
   int _currentDayIndex = 7;
   final List<String> _categories = const [
     'Veg',
@@ -32,6 +34,7 @@ class _MenuScreenState extends State<MenuScreen> {
   ];
   bool _activeSubscription = false;
   DateTime? _subscriptionStartDate;
+  DateTime? _subscriptionEndDate;
   int _remainingSeconds = 0;
   Timer? _timer;
   List<Map<String, String>> dates = [];
@@ -42,20 +45,27 @@ class _MenuScreenState extends State<MenuScreen> {
     'North Indian': false,
   };
   Map<String, Map<String, dynamic>> _menuCache = {};
-  File? _profileImage;
 
   @override
   void initState() {
     super.initState();
     _scheduleDailyUpdate();
     _loadInitialState();
-    _loadProfileImage();
+    profileController.loadProfileImage();
     dates = _generateDates();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _scrollToCurrentDay();
-      await _fetchMenuData();
-    });
+    
+    // Initialize scroll controller with initial offset
+    _scrollController = ScrollController(
+      initialScrollOffset: itemWidth * (_currentDayIndex - 2),
+    );
     _scrollController.addListener(_handleScroll);
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+      _scrollToCurrentDay();
+      }
+      _fetchMenuData();
+    });
   }
 
   void _handleScroll() {
@@ -66,33 +76,43 @@ class _MenuScreenState extends State<MenuScreen> {
       0,
       dates.length - 1,
     );
-
     if (newIndex != _currentDayIndex) {
-      _currentDayIndex = newIndex;
-      _currentDate = DateTime.now()
-          .subtract(const Duration(days: 7))
-          .add(Duration(days: _currentDayIndex));
-      _fetchMenuData();
-      setState(() {});
+      setState(() {
+        _currentDayIndex = newIndex;
+      });
     }
   }
 
   void _scrollToCurrentDay() {
+    if (!_scrollController.hasClients) return;
+    
     final targetOffset = itemWidth * (_currentDayIndex - 2);
     _scrollController.jumpTo(
       targetOffset.clamp(0, _scrollController.position.maxScrollExtent),
     );
   }
 
+  void _scrollToDate(int index) {
+    if (!_scrollController.hasClients) return;
+    
+    setState(() {
+      _currentDayIndex = index;
+    });
+    _fetchMenuData();
+    
+    final targetOffset = itemWidth * (index - 2);
+    _scrollController.animateTo(
+      targetOffset.clamp(0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
   Future<void> _fetchMenuData() async {
-    final dateStr = MenuUtils.getDateString(_currentDate);
-    if (_menuCache[dateStr] == null) {
-      _menuCache = await MenuUtils.fetchMenuData(
-        baseDate: _currentDate,
-        dateFilter: dateStr,
-      );
-      if (mounted) setState(() {});
-    }
+    _menuCache = await MenuUtils.fetchMenuData(
+      baseDate: _baseDate,
+    ); // Fetch for range of dates
+    if (mounted) setState(() {});
   }
 
   @override
@@ -104,10 +124,8 @@ class _MenuScreenState extends State<MenuScreen> {
 
   List<Map<String, String>> _generateDates() {
     final List<Map<String, String>> dates = [];
-    final baseDate = DateTime.now();
-    final startDate = baseDate.subtract(const Duration(days: 7));
     for (int i = 0; i < 35; i++) {
-      final date = startDate.add(Duration(days: i));
+      final date = _baseDate.add(Duration(days: i));
       dates.add({
         'day': date.day.toString(),
         'weekday': _getWeekday(date.weekday),
@@ -129,46 +147,30 @@ class _MenuScreenState extends State<MenuScreen> {
     ][weekday - 1];
   }
 
-  Future<void> _loadInitialState() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && mounted) {
-          final data = doc.data() ?? {};
+  @override
+  void onOrderUpdate(QuerySnapshot snapshot) {
+    if (mounted) {
           setState(() {
-            _activeSubscription = data['activeSubscription'] ?? false;
-            _subscriptionStartDate =
-                data['subscriptionStartDate'] != null
-                    ? (data['subscriptionStartDate'] as Timestamp).toDate()
-                    : null;
-            if (_activeSubscription &&
-                pausePlayController.subscriptionEndDate.value != null) {
-              _remainingSeconds =
-                  pausePlayController.subscriptionEndDate.value!
-                      .difference(DateTime.now())
-                      .inSeconds;
-              if (_remainingSeconds > 0 && !pausePlayController.isPaused.value)
-                _startTimer();
-            }
-          });
-        }
-      } catch (e) {
-        print('Error loading initial state: $e');
-      }
+        // Update UI based on order changes
+      });
     }
   }
 
-  Future<void> _loadProfileImage() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final imagePath = '${directory.path}/profile_image.jpg';
-      final file = File(imagePath);
-      if (await file.exists() && mounted) {
-        setState(() => _profileImage = file);
-      }
-    } catch (e) {
-      print('Error loading profile image: $e');
+  Future<void> _loadInitialState() async {
+    await loadUserData();
+    if (mounted) {
+      setState(() {
+        _activeSubscription = isSubscribed;
+        _subscriptionStartDate = subscriptionStartDate;
+        _subscriptionEndDate = subscriptionEndDate;
+        
+        if (isSubscribed && subscriptionEndDate != null) {
+          _remainingSeconds = subscriptionEndDate!.difference(DateTime.now()).inSeconds;
+          if (_remainingSeconds > 0 && !pausePlayController.isPaused.value) {
+            _startTimer();
+          }
+        }
+      });
     }
   }
 
@@ -192,36 +194,12 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Future<void> _deactivateSubscription() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-      final userData = userDoc.data() ?? {};
-      if (userData['activeSubscription'] == true) {
-        await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .collection('pastSubscriptions')
-            .add({
-              'subscriptionPlan': userData['subscriptionPlan'],
-              'subscriptionStartDate': userData['subscriptionStartDate'],
-              'subscriptionEndDate': Timestamp.now(),
-              'endedNaturally': true,
-            });
-        await _firestore.collection('users').doc(user.uid).update({
-          'activeSubscription': false,
-          'subscriptionPlan': FieldValue.delete(),
-          'subscriptionStartDate': FieldValue.delete(),
-          'subscriptionEndDate': FieldValue.delete(),
-          'isPaused': FieldValue.delete(),
-          'pausedAt': FieldValue.delete(),
-        });
+    await deactivateSubscription();
         if (mounted) {
           setState(() {
             _activeSubscription = false;
             _timer?.cancel();
           });
-        }
-      }
     }
   }
 
@@ -234,7 +212,7 @@ class _MenuScreenState extends State<MenuScreen> {
     final duration = scheduledTime.difference(now);
     Timer(duration, () {
       if (mounted) {
-        _currentDate = DateTime.now();
+        _baseDate = DateTime.now().subtract(const Duration(days: 7));
         _fetchMenuData();
         setState(() {});
         _scheduleDailyUpdate();
@@ -281,21 +259,6 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
-  void _scrollToDate(int index) {
-    _currentDayIndex = index;
-    _currentDate = DateTime.now()
-        .subtract(const Duration(days: 7))
-        .add(Duration(days: _currentDayIndex));
-    _fetchMenuData();
-    final targetOffset = itemWidth * (index - 2);
-    _scrollController.animateTo(
-      targetOffset.clamp(0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
-    );
-    setState(() {});
-  }
-
   String _formatRemainingDays(int seconds) =>
       '${(seconds ~/ (24 * 3600))} days';
 
@@ -325,7 +288,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _formatDate(_currentDate),
+                                _formatDate(_baseDate.add(Duration(days: _currentDayIndex))),
                                 style: TextStyle(
                                   color: Colors.blue[900],
                                   fontSize: 16,
@@ -347,7 +310,8 @@ class _MenuScreenState extends State<MenuScreen> {
                             ],
                           ),
                         ),
-                        AnimatedContainer(
+                        GetX<ProfileController>(
+                          builder: (controller) => AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
@@ -366,11 +330,11 @@ class _MenuScreenState extends State<MenuScreen> {
                           child: CircleAvatar(
                             radius: 36,
                             backgroundColor: Colors.white,
-                            backgroundImage:
-                                _profileImage != null
-                                    ? FileImage(_profileImage!)
+                              backgroundImage: controller.profileImage.value != null
+                                  ? FileImage(controller.profileImage.value!)
                                     : const AssetImage('assets/profile_pic.jpg')
                                         as ImageProvider,
+                            ),
                           ),
                         ),
                       ],
@@ -399,7 +363,11 @@ class _MenuScreenState extends State<MenuScreen> {
                             width: 1,
                           ),
                         ),
-                        child: Column(
+                        child: GetX<PausePlayController>(
+                          builder: (controller) {
+                            final isPaused = controller.isPaused.value;
+                            final subEndDate = controller.subscriptionEndDate.value;
+                            return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
@@ -411,9 +379,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue[700]!.withAlpha(
-                                            51,
-                                          ),
+                                              color: Colors.blue[700]!.withAlpha(51),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
@@ -438,44 +404,29 @@ class _MenuScreenState extends State<MenuScreen> {
                                   ),
                                 ),
                                 GestureDetector(
-                                  onTap:
-                                      () => pausePlayController.togglePausePlay(
-                                        _activeSubscription,
-                                      ),
-                                  child: Obx(
-                                    () => Container(
+                                      onTap: () => controller.togglePausePlay(_activeSubscription),
+                                      child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color:
-                                            pausePlayController.isPaused.value
-                                                ? Colors.red[600]
-                                                : Colors.green[600],
+                                          color: isPaused ? Colors.red[600] : Colors.green[600],
                                         borderRadius: BorderRadius.circular(12),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: (pausePlayController
-                                                        .isPaused
-                                                        .value
-                                                    ? Colors.red
-                                                    : Colors.green)
-                                                .withAlpha(77),
+                                              color: (isPaused ? Colors.red : Colors.green).withAlpha(77),
                                             blurRadius: 6,
                                             offset: const Offset(0, 2),
                                           ),
                                         ],
                                       ),
                                       child: Text(
-                                        pausePlayController.isPaused.value
-                                            ? 'Resume'
-                                            : 'Pause',
+                                          isPaused ? 'Resume' : 'Pause',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                        ),
                                       ),
                                     ),
                                   ),
@@ -514,16 +465,14 @@ class _MenuScreenState extends State<MenuScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Obx(
-                                    () => Text(
-                                      'End: ${_formatDate(pausePlayController.subscriptionEndDate.value)}',
+                                      child: Text(
+                                        'End: ${_formatDate(subEndDate)}',
                                       style: TextStyle(
                                         color: Colors.blue[800],
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                       ),
                                       overflow: TextOverflow.ellipsis,
-                                    ),
                                   ),
                                 ),
                               ],
@@ -553,38 +502,28 @@ class _MenuScreenState extends State<MenuScreen> {
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Obx(
-                                  () => Icon(
-                                    pausePlayController.isPaused.value
-                                        ? Icons.pause_circle_outline
-                                        : Icons.play_circle_filled,
-                                    color:
-                                        pausePlayController.isPaused.value
-                                            ? Colors.red[600]
-                                            : Colors.green[600],
+                                    Icon(
+                                      isPaused ? Icons.pause_circle_outline : Icons.play_circle_filled,
+                                      color: isPaused ? Colors.red[600] : Colors.green[600],
                                     size: 20,
-                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Obx(
-                                    () => Text(
-                                      'Status: ${pausePlayController.isPaused.value ? 'Paused' : 'Ongoing'}',
+                                      child: Text(
+                                        'Status: ${isPaused ? 'Paused' : 'Ongoing'}',
                                       style: TextStyle(
-                                        color:
-                                            pausePlayController.isPaused.value
-                                                ? Colors.red[600]
-                                                : Colors.green[600],
+                                          color: isPaused ? Colors.red[600] : Colors.green[600],
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                       ),
                                       overflow: TextOverflow.ellipsis,
-                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ],
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -740,6 +679,17 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Widget _buildMenuCard(String category) {
+    final dateStr = dates[_currentDayIndex]['date']!;
+    final items = _menuCache[category]?['items'] as List<dynamic>? ?? [];
+    final lunchItem = items.firstWhere(
+      (item) => item['mealType'] == 'Lunch' && item['date'] == dateStr,
+      orElse: () => {'item': 'Not Available', 'imageUrl': ''},
+    );
+    final dinnerItem = items.firstWhere(
+      (item) => item['mealType'] == 'Dinner' && item['date'] == dateStr,
+      orElse: () => {'item': 'Not Available', 'imageUrl': ''},
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: AnimatedContainer(
@@ -825,14 +775,22 @@ class _MenuScreenState extends State<MenuScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildMealRow('Lunch', category),
+                _buildMealRow('Lunch', lunchItem['item']),
                 const SizedBox(height: 12),
-                _buildMealRow('Dinner', category),
+                _buildMealRow('Dinner', dinnerItem['item']),
                 if (expandedCards[category] ?? false) ...[
                   const SizedBox(height: 20),
-                  _buildImageSection('Lunch', category),
+                  _buildImageSection(
+                    'Lunch',
+                    category,
+                    lunchItem['imageUrl'] ?? '',
+                  ),
                   const SizedBox(height: 20),
-                  _buildImageSection('Dinner', category),
+                  _buildImageSection(
+                    'Dinner',
+                    category,
+                    dinnerItem['imageUrl'] ?? '',
+                  ),
                 ],
               ],
             ),
@@ -842,7 +800,7 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildMealRow(String mealType, String category) {
+  Widget _buildMealRow(String mealType, String item) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -872,11 +830,15 @@ class _MenuScreenState extends State<MenuScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              _MenuTextWidget(
-                mealType: mealType,
-                category: category,
-                date: _currentDate,
-                menuData: _menuCache[category],
+              Text(
+                item,
+                style: TextStyle(
+                  color: Colors.white.withAlpha(230),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -885,7 +847,7 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildImageSection(String mealType, String category) {
+  Widget _buildImageSection(String mealType, String category, String imageUrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -901,44 +863,10 @@ class _MenuScreenState extends State<MenuScreen> {
         _MenuImageWidget(
           mealType: mealType,
           category: category,
-          date: _currentDate,
-          menuData: _menuCache[category],
+          dateStr: dates[_currentDayIndex]['date']!,
+          imageUrl: imageUrl,
         ),
       ],
-    );
-  }
-}
-
-class _MenuTextWidget extends StatelessWidget {
-  final String mealType;
-  final String category;
-  final DateTime date;
-  final Map<String, dynamic>? menuData;
-
-  const _MenuTextWidget({
-    required this.mealType,
-    required this.category,
-    required this.date,
-    this.menuData,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = menuData?['items'] as List<dynamic>? ?? [];
-    final dateStr = MenuUtils.getDateString(date);
-    final item = items.firstWhere(
-      (item) => item['mealType'] == mealType && item['date'] == dateStr,
-      orElse: () => {'item': 'Not Available'},
-    );
-    return Text(
-      item['item'],
-      style: TextStyle(
-        color: Colors.white.withAlpha(230),
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -946,14 +874,14 @@ class _MenuTextWidget extends StatelessWidget {
 class _MenuImageWidget extends StatefulWidget {
   final String mealType;
   final String category;
-  final DateTime date;
-  final Map<String, dynamic>? menuData;
+  final String dateStr;
+  final String imageUrl;
 
   const _MenuImageWidget({
     required this.mealType,
     required this.category,
-    required this.date,
-    this.menuData,
+    required this.dateStr,
+    required this.imageUrl,
   });
 
   @override
@@ -961,7 +889,7 @@ class _MenuImageWidget extends StatefulWidget {
 }
 
 class _MenuImageWidgetState extends State<_MenuImageWidget> {
-  final storage = const FlutterSecureStorage(); // Correct instantiation
+  final storage = const FlutterSecureStorage();
 
   Future<String?> _getLocalImagePath(String url, String key) async {
     if (url.isEmpty) return null;
@@ -989,16 +917,10 @@ class _MenuImageWidgetState extends State<_MenuImageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final items = widget.menuData?['items'] as List<dynamic>? ?? [];
-    final dateStr = MenuUtils.getDateString(widget.date);
-    final item = items.firstWhere(
-      (item) => item['mealType'] == widget.mealType && item['date'] == dateStr,
-      orElse: () => {'imageUrl': ''},
-    );
     return FutureBuilder<String?>(
       future: _getLocalImagePath(
-        item['imageUrl'] ?? '',
-        '${widget.mealType.toLowerCase()}-$dateStr-${widget.category}',
+        widget.imageUrl,
+        '${widget.mealType.toLowerCase()}-${widget.dateStr}-${widget.category}',
       ),
       builder: (context, snapshot) {
         return snapshot.data != null

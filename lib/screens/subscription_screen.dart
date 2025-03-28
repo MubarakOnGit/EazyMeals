@@ -70,12 +70,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (_isActiveSubscription || _auth.currentUser == null) return;
 
     final user = _auth.currentUser!;
-    final orderId = _uuid.v4();
-    final message =
-        'Subscription Request\nOrder ID: $orderId\nEmail: ${user.email}\n'
-        'Category: $_selectedCategory\nMeal Type: $_selectedMealType\nPlan: $_selectedPlan\n'
-        'Amount: \$${_price.toStringAsFixed(2)}';
+    final orderId = _uuid.v4(); // Single order ID for the subscription request
 
+    // Construct the WhatsApp message
+    final message =
+        'Subscription Request\n'
+            'Order ID: $orderId\n'
+            'Email: ${user.email}\n'
+            'Category: $_selectedCategory\n'
+            'Meal Type: $_selectedMealType\n'
+            'Plan: $_selectedPlan\n'
+            'Amount: \$${_price.toStringAsFixed(2)}' +
+        (_selectedMealType == 'Both'
+            ? '\nNote: Includes separate Lunch and Dinner orders daily'
+            : '');
+
+    // Save a single pending subscription request
     await _firestore
         .collection('users')
         .doc(user.uid)
@@ -85,12 +95,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           'orderId': orderId,
           'subscriptionPlan': _selectedPlan,
           'category': _selectedCategory,
-          'mealType': _selectedMealType,
+          'mealType':
+              _selectedMealType, // Keep as "Both" to indicate dual orders
           'amount': _price,
           'createdAt': Timestamp.now(),
           'status': 'Pending Payment',
         });
 
+    // Launch WhatsApp
     final whatsappUrl =
         'https://wa.me/+995500900095?text=${Uri.encodeComponent(message)}';
     if (await canLaunchUrl(Uri.parse(whatsappUrl))) {

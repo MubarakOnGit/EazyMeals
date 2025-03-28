@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 import '../controllers/order_status_controller.dart';
 import '../screens/subscription_screen.dart';
+import 'base_state.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -13,9 +14,7 @@ class HistoryScreen extends StatefulWidget {
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+class _HistoryScreenState extends BaseState<HistoryScreen> {
   final OrderController orderController = Get.find<OrderController>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -27,6 +26,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.initState();
     _scheduleOrderCancellation();
     _checkUserData();
+  }
+
+  @override
+  void onOrderUpdate(QuerySnapshot snapshot) {
+    if (mounted) {
+      setState(() {
+        // Update UI based on order changes
+      });
+    }
   }
 
   void _scheduleOrderCancellation() {
@@ -42,18 +50,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _cancelPendingOrders() async {
-    final user = _auth.currentUser;
+    final user = currentUser;
     if (user != null) {
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
       final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await firestore.collection('users').doc(user.uid).get();
       final userData = userDoc.data() ?? {};
       final subscriptionId = userData['subscriptionId'] as String? ?? '';
 
       final orders =
-          await _firestore
+          await firestore
               .collection('orders')
               .where('userId', isEqualTo: user.uid)
               .where('subscriptionId', isEqualTo: subscriptionId)
@@ -65,7 +73,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
               .get();
 
-      final batch = _firestore.batch();
+      final batch = firestore.batch();
       for (var doc in orders.docs) {
         batch.update(doc.reference, {'status': 'Cancelled'});
       }
@@ -74,9 +82,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _checkUserData() async {
-    final user = _auth.currentUser;
+    final user = currentUser;
     if (user != null) {
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await firestore.collection('users').doc(user.uid).get();
       final userData = userDoc.data() ?? {};
       final name = userData['name'] as String?;
       final phone = userData['phone'] as String?;
@@ -95,7 +103,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _saveUserData() async {
-    final user = _auth.currentUser;
+    final user = currentUser;
     if (user != null) {
       if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
         if (mounted) {
@@ -106,7 +114,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return;
       }
 
-      await _firestore.collection('users').doc(user.uid).set({
+      await firestore.collection('users').doc(user.uid).set({
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
       }, SetOptions(merge: true));
@@ -138,7 +146,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
 
     if (confirm == true) {
-      await _firestore
+      await firestore
           .collection('users')
           .doc(userId)
           .collection('pendingOrders')
@@ -185,7 +193,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _auth.currentUser;
+    final user = currentUser;
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -196,10 +204,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.blue[900]!.withAlpha(26),
-                  Colors.grey[100]!,
-                ], // 0.1 -> 26
+                colors: [Colors.blue[900]!.withAlpha(26), Colors.grey[100]!],
               ),
             ),
           ),
@@ -231,7 +236,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ? _buildDataInputCard()
                           : StreamBuilder<DocumentSnapshot>(
                             stream:
-                                _firestore
+                                firestore
                                     .collection('users')
                                     .doc(user.uid)
                                     .snapshots(),
@@ -345,7 +350,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildPendingSubscriptions(String userId) {
     return StreamBuilder<QuerySnapshot>(
       stream:
-          _firestore
+          firestore
               .collection('users')
               .doc(userId)
               .collection('pendingOrders')
@@ -491,7 +496,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildEndedSubscriptions(String userId) {
     return StreamBuilder<QuerySnapshot>(
       stream:
-          _firestore
+          firestore
               .collection('users')
               .doc(userId)
               .collection('pastSubscriptions')
@@ -588,7 +593,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
-        ], // 0.1 -> 26
+        ],
       ),
       child: Column(
         children: [
@@ -684,11 +689,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildOrderDetails(String userId, String subscriptionId) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Today’s Order',
+          "Today's Orders",
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -696,51 +705,129 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Obx(
-          () => Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
-              ], // 0.1 -> 26
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        StreamBuilder<QuerySnapshot>(
+          stream:
+              firestore
+                  .collection('orders')
+                  .where('userId', isEqualTo: userId)
+                  .where('subscriptionId', isEqualTo: subscriptionId)
+                  .where(
+                    'date',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
+                  )
+                  .where(
+                    'date',
+                    isLessThanOrEqualTo: Timestamp.fromDate(todayEnd),
+                  )
+                  .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            }
+            final orders = snapshot.data!.docs;
+            if (orders.isEmpty) {
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      orderController.todayOrderStatus.value == 'No Order'
-                          ? 'No order for today'
-                          : 'Today\'s Meal',
-                      style: TextStyle(
-                        color: Colors.blue[900],
-                        fontWeight: FontWeight.w500,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No orders for today',
+                          style: TextStyle(
+                            color: Colors.blue[900],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          _formatDate(DateTime.now()),
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
-                      _formatDate(DateTime.now()),
-                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                      'No Order',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
-                Text(
-                  orderController.todayOrderStatus.value,
-                  style: TextStyle(
-                    color: _getStatusColor(
-                      orderController.todayOrderStatus.value,
-                    ),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              );
+            }
+            return Column(
+              children:
+                  orders.map((doc) {
+                    final order = doc.data() as Map<String, dynamic>;
+                    final status = order['status'] as String;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withAlpha(26),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order['mealType'] ?? 'Unknown Meal',
+                                style: TextStyle(
+                                  color: Colors.blue[900],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                _formatDate(DateTime.now()),
+                                style: TextStyle(
+                                  color: Colors.grey[700],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            status,
+                            style: TextStyle(
+                              color: _getStatusColor(status),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+            );
+          },
         ),
         const SizedBox(height: 12),
         Text(
@@ -782,7 +869,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   ) {
     return StreamBuilder<QuerySnapshot>(
       stream:
-          _firestore
+          firestore
               .collection('orders')
               .where('userId', isEqualTo: userId)
               .where('subscriptionId', isEqualTo: subscriptionId)
@@ -817,9 +904,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6),
-        ], // 0.1 -> 26
+        boxShadow: [BoxShadow(color: Colors.grey.withAlpha(26), blurRadius: 6)],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -862,13 +947,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(color: Colors.black.withAlpha(51), blurRadius: 10),
-          ], // 0.2 -> 51
+          ],
         ),
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
             const Text(
-              'Let’s Get Started',
+              "Let's Get Started",
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
@@ -972,6 +1057,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       'Cancelled' => Colors.red,
       'Ended' => Colors.red,
       'Paused' => Colors.orange,
+      'No Order' => Colors.grey,
       _ => Colors.grey,
     };
   }

@@ -12,6 +12,9 @@ import '../screens/subscription_screen.dart';
 import 'address_management_screen.dart';
 import 'student_verification_survey.dart';
 import 'employee_login_screen.dart';
+import 'base_state.dart';
+import 'package:get/get.dart';
+import 'package:eazy_meals/controllers/profile_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -20,30 +23,28 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+class _ProfileScreenState extends BaseState<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final ProfileController profileController = Get.find<ProfileController>();
   String _activeAddress = 'Add Your Address and Set Active';
   String _userName = '';
   String _phoneNumber = '';
   bool _isLoading = true;
   bool _isVerified = false;
-  File? _profileImage;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
-    _loadLocalProfileImage();
+    profileController.loadProfileImage();
   }
 
   Future<void> _loadUserData() async {
-    final user = _auth.currentUser;
+    final user = currentUser;
     if (user != null) {
       try {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
+        final doc = await firestore.collection('users').doc(user.uid).get();
         if (doc.exists && mounted) {
           final data = doc.data() ?? {};
           setState(() {
@@ -51,8 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _phoneNumber = data['phoneNumber'] ?? '';
             _nameController.text = _userName;
             _phoneController.text = _phoneNumber;
-            _isVerified =
-                data['studentDetails']?['isVerified'] as bool? ?? false;
+            _isVerified = data['studentDetails']?['isVerified'] as bool? ?? false;
             _activeAddress = data['activeAddress'] ?? 'Manage your addresses';
           });
         }
@@ -64,42 +64,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _loadLocalProfileImage() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final imagePath = '${directory.path}/profile_image.jpg';
-      final file = File(imagePath);
-      if (await file.exists() && mounted) {
-        setState(() => _profileImage = file);
-      }
-    } catch (e) {
-      debugPrint('Error loading local image: $e');
-    }
-  }
-
   Future<void> _pickProfileImage() async {
-    final picker = ImagePicker();
     try {
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null && mounted) {
-        final directory = await getApplicationDocumentsDirectory();
-        final imagePath = '${directory.path}/profile_image.jpg';
-        final file = File(pickedFile.path);
-        await file.copy(imagePath);
-        setState(() => _profileImage = File(imagePath));
-      }
-    } on PlatformException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick image: ${e.message}')),
-        );
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        await profileController.updateProfileImage(File(pickedFile.path));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Unexpected error: $e')));
-      }
+      print('Error picking image: $e');
     }
   }
 
@@ -121,37 +94,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not launch email')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch email')),
+      );
     }
   }
 
   Future<void> _showVerificationSurvey() async {
-    // Store context in a local variable before async operations
     final currentContext = context;
-
     final result = await Navigator.push(
       currentContext,
       MaterialPageRoute(builder: (_) => StudentVerificationSurvey()),
     );
 
-    // Early exit if result is null or widget is disposed
     if (result == null || !mounted) return;
 
-    final user = _auth.currentUser;
+    final user = currentUser;
     if (user == null) return;
 
     try {
-      await _firestore.collection('users').doc(user.uid).update({
+      await firestore.collection('users').doc(user.uid).update({
         'studentDetails': result,
       });
 
-      // Check mounted before setState (State-specific check)
       if (!mounted) return;
       setState(() => _isVerified = result['isVerified'] ?? false);
 
-      // Use `context.mounted` (Flutter 3.13+) for ScaffoldMessenger
       if (!currentContext.mounted) return;
       ScaffoldMessenger.of(currentContext).showSnackBar(
         const SnackBar(content: Text('Student verification submitted!')),
@@ -168,8 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
-      builder:
-          (_) => AlertDialog(
+      builder: (_) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -200,32 +167,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  'Logout',
-                  style: TextStyle(color: Colors.white),
-                ),
                 onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout'),
               ),
             ],
           ),
     );
 
-    if (confirm == true && mounted) {
-      try {
-        await _auth.signOut();
-        if (mounted) {
+    if (confirm == true) {
+      await logout();
+      if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const LoginScreen()),
           );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Failed to logout: $e')));
-        }
-      }
     }
   }
 
@@ -312,9 +267,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
       try {
-        await _firestore
+        await firestore
             .collection('users')
-            .doc(_auth.currentUser!.uid)
+            .doc(currentUser!.uid)
             .update({
               'name': _nameController.text.trim(),
               'phoneNumber': _phoneController.text.trim(),
@@ -345,6 +300,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _navigateToAddressManagement(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddressManagementScreen()),
+    ).then((_) => _loadUserData());
+  }
+
+  void _navigateToStudentVerification(BuildContext context) {
+    if (_isVerified) return;
+    _showVerificationSurvey();
+  }
+
+  Future<void> _launchHelpSupport() async {
+    const phone = '+995500900095';
+    final url = Uri.parse('https://wa.me/$phone');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not launch WhatsApp')),
+      );
+    }
+  }
+
   void _navigateToEmployeeLogin(BuildContext context) {
     Navigator.push(
       context,
@@ -353,11 +332,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   @override
+  void onOrderUpdate(QuerySnapshot snapshot) {
+    if (mounted) {
+      setState(() {
+        // Update UI based on order changes
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body:
-          _isLoading
+      body: _isLoading
               ? Center(
                 child: CircularProgressIndicator(color: Colors.blue[900]),
               )
@@ -369,7 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         colors: [
                           Colors.blue[900]!.withAlpha(13),
                           backgroundColor,
-                        ], // 0.05 -> 13
+                      ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -401,7 +388,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 GestureDetector(
                                   onTap: _pickProfileImage,
-                                  child: AnimatedContainer(
+                                child: GetX<ProfileController>(
+                                  builder: (controller) => AnimatedContainer(
                                     duration: const Duration(milliseconds: 300),
                                     curve: Curves.easeInOut,
                                     width: 120,
@@ -418,14 +406,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           blurRadius: 10,
                                           offset: const Offset(0, 4),
                                         ),
-                                      ], // 0.2 -> 51
+                                      ],
                                       image: DecorationImage(
-                                        image:
-                                            _profileImage != null
-                                                ? FileImage(_profileImage!)
-                                                : const AssetImage(
-                                                      'assets/profile_pic.jpg',
-                                                    )
+                                        image: controller.profileImage.value != null
+                                            ? FileImage(controller.profileImage.value!)
+                                            : const AssetImage('assets/profile_pic.jpg')
                                                     as ImageProvider,
                                         fit: BoxFit.cover,
                                       ),
@@ -448,6 +433,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           color: Colors.white,
                                           size: 18,
                                         ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -463,12 +449,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ),
                                 Text(
-                                  _auth.currentUser?.email ?? '',
+                                currentUser?.email ?? '',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.white.withAlpha(179),
                                     fontStyle: FontStyle.italic,
-                                  ), // 0.7 -> 179
+                                ),
                                 ),
                               ],
                             ),
@@ -503,41 +489,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 icon: Icons.restaurant_menu,
                                 title: 'Meal Plan',
                                 subtitle: 'Premium Weekly Subscription',
-                                onTap:
-                                    () => _navigateToMealPreferences(
-                                      context,
-                                    ), // Line 143 fixed
+                              onTap: () => _navigateToMealPreferences(context),
                               ),
                               ProfileCard(
                                 icon: Icons.location_on,
                                 title: 'Address',
                                 subtitle: _activeAddress,
-                                onTap:
-                                    () => Navigator.push(
+                              onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder:
-                                            (_) =>
-                                                const AddressManagementScreen(),
+                                  builder: (_) => const AddressManagementScreen(),
                                       ),
                                     ).then((_) => _loadUserData()),
                               ),
                               ProfileCard(
                                 icon: Icons.school,
-                                title:
-                                    _isVerified
-                                        ? 'Verified Student Discount'
-                                        : 'Student Discount',
-                                subtitle:
-                                    _isVerified
-                                        ? '10% discount activated'
-                                        : 'Verify for 10% off',
-                                onTap:
-                                    _isVerified
-                                        ? null
-                                        : _showVerificationSurvey,
-                                trailing:
-                                    _isVerified
+                              title: _isVerified ? 'Verified Student Discount' : 'Student Discount',
+                              subtitle: _isVerified ? '10% discount activated' : 'Verify for 10% off',
+                              onTap: _isVerified ? null : _showVerificationSurvey,
+                              trailing: _isVerified
                                         ? const Icon(
                                           Icons.check_circle,
                                           color: Colors.green,
@@ -570,10 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 icon: Icons.admin_panel_settings,
                                 title: 'Employee Login',
                                 subtitle: 'Access admin features',
-                                onTap:
-                                    () => _navigateToEmployeeLogin(
-                                      context,
-                                    ), // Line 147 fixed
+                              onTap: () => _navigateToEmployeeLogin(context),
                               ),
                               ProfileCard(
                                 icon: Icons.logout,
