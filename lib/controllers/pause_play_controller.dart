@@ -6,31 +6,53 @@ class PausePlayController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RxBool isPaused = false.obs;
-  final Rx<DateTime?> pauseStartTime = Rx<DateTime?>(null);
+  final RxBool isPausedPreview = false.obs;
   final Rx<DateTime?> subscriptionEndDate = Rx<DateTime?>(null);
+  final Rx<DateTime?> tempEndDate = Rx<DateTime?>(null);
+  String? currentUserId;
 
   @override
   void onInit() {
     super.onInit();
-    _listenToPauseState();
+    _setupAuthListener();
+  }
+
+  void _setupAuthListener() {
+    _auth.authStateChanges().listen((User? user) {
+      if (user != null && user.uid != currentUserId) {
+        currentUserId = user.uid;
+        _listenToPauseState();
+      } else if (user == null) {
+        currentUserId = null;
+        isPaused.value = false;
+        isPausedPreview.value = false;
+        subscriptionEndDate.value = null;
+        tempEndDate.value = null;
+      }
+    });
   }
 
   void _listenToPauseState() {
-    final user = _auth.currentUser;
-    if (user != null) {
-      _firestore.collection('users').doc(user.uid).snapshots().listen((doc) {
+    if (currentUserId != null) {
+      _firestore.collection('users').doc(currentUserId).snapshots().listen((
+        doc,
+      ) {
         if (doc.exists) {
           final data = doc.data() ?? {};
           isPaused.value = data['isPaused'] ?? false;
-          pauseStartTime.value =
-              data['pausedAt'] != null
-                  ? (data['pausedAt'] as Timestamp).toDate()
-                  : null;
           subscriptionEndDate.value =
               data['subscriptionEndDate'] != null
                   ? (data['subscriptionEndDate'] as Timestamp).toDate()
                   : null;
-          print('Pause state updated: isPaused=${isPaused.value}');
+          // Apply preview if paused
+          tempEndDate.value =
+              isPaused.value && subscriptionEndDate.value != null
+                  ? subscriptionEndDate.value!.add(const Duration(days: 1))
+                  : subscriptionEndDate.value;
+          isPausedPreview.value = isPaused.value;
+          print(
+            'Pause state synced: isPaused=${isPaused.value}, tempEndDate=${tempEndDate.value}',
+          );
         }
       }, onError: (e) => print('Error listening to pause state: $e'));
     }
@@ -38,7 +60,6 @@ class PausePlayController extends GetxController {
 
   Future<void> togglePausePlay(bool isSubscribed) async {
     final user = _auth.currentUser;
-    print('togglePausePlay called, isSubscribed: $isSubscribed');
     if (user == null || !isSubscribed || subscriptionEndDate.value == null) {
       print(
         'Exiting early: user=$user, isSubscribed=$isSubscribed, subEndDate=${subscriptionEndDate.value}',
@@ -47,38 +68,31 @@ class PausePlayController extends GetxController {
     }
 
     final now = DateTime.now();
-    print('Current time: $now, Hour: ${now.hour}');
     if (now.hour >= 9 && now.hour < 22) {
-      final newIsPaused = !isPaused.value;
-      print('Toggling to: $newIsPaused');
-      isPaused.value = newIsPaused; // Update local state immediately
+      final newIsPausedPreview = !isPausedPreview.value;
+      isPausedPreview.value = newIsPausedPreview;
 
-      if (newIsPaused) {
-        pauseStartTime.value = now;
-      } else if (pauseStartTime.value != null) {
-        final pausedDuration = now.difference(pauseStartTime.value!).inSeconds;
-        subscriptionEndDate.value = subscriptionEndDate.value!.add(
-          Duration(seconds: pausedDuration),
+      if (newIsPausedPreview) {
+        tempEndDate.value = subscriptionEndDate.value!.add(
+          const Duration(days: 1),
         );
-        pauseStartTime.value = null;
+        Get.snackbar('Paused', 'Food delivery paused for tomorrow');
+        print('Paused - tempEndDate updated to: ${tempEndDate.value}');
+      } else {
+        tempEndDate.value = subscriptionEndDate.value;
+        Get.snackbar('Resumed', 'Food delivery resumed for tomorrow');
+        print('Resumed - tempEndDate reset to: ${tempEndDate.value}');
       }
 
       try {
-        print('Updating Firestore with isPaused: $newIsPaused');
         await _firestore.collection('users').doc(user.uid).update({
-          'isPaused': newIsPaused,
-          'pausedAt': newIsPaused ? Timestamp.now() : FieldValue.delete(),
-          'subscriptionEndDate': Timestamp.fromDate(subscriptionEndDate.value!),
+          'isPaused': newIsPausedPreview,
         });
-        print('Firestore updated successfully');
-        if (newIsPaused) {
-          await markNextDayPaused(user.uid);
-        } else {
-          await resumeNextDay(user.uid);
-        }
+        print('Firestore updated: isPaused=$newIsPausedPreview');
       } catch (e) {
-        isPaused.value = !newIsPaused; // Revert on error
-        Get.snackbar('Error', 'Failed to update subscription status: $e');
+        isPausedPreview.value = !newIsPausedPreview;
+        tempEndDate.value = subscriptionEndDate.value;
+        Get.snackbar('Error', 'Failed to update pause status: $e');
         print('Toggle pause/play error: $e');
       }
     } else {
@@ -86,95 +100,9 @@ class PausePlayController extends GetxController {
     }
   }
 
-  Future<void> markNextDayPaused(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(const Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-
-    try {
-      final orders =
-          await _firestore
-              .collection('orders')
-              .where('userId', isEqualTo: userId)
-              .where('status', isEqualTo: 'Pending Delivery')
-              .where(
-                'date',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-              )
-              .where(
-                'date',
-                isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd),
-              )
-              .get();
-      for (var order in orders.docs) {
-        await order.reference.update({'status': 'Paused'});
-      }
-    } catch (e) {
-      print('Error marking next day paused: $e');
-    }
-  }
-
-  Future<void> resumeNextDay(String userId) async {
-    final now = DateTime.now();
-    final tomorrow = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(const Duration(days: 1));
-    final tomorrowStart = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      0,
-      0,
-    );
-    final tomorrowEnd = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-      23,
-      59,
-      59,
-    );
-
-    try {
-      final orders =
-          await _firestore
-              .collection('orders')
-              .where('userId', isEqualTo: userId)
-              .where('status', isEqualTo: 'Paused')
-              .where(
-                'date',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(tomorrowStart),
-              )
-              .where(
-                'date',
-                isLessThanOrEqualTo: Timestamp.fromDate(tomorrowEnd),
-              )
-              .get();
-      for (var order in orders.docs) {
-        await order.reference.update({'status': 'Pending Delivery'});
-      }
-    } catch (e) {
-      print('Error resuming next day: $e');
-    }
+  String getPauseStatus() {
+    return isPausedPreview.value
+        ? 'Paused for tomorrow'
+        : 'Active for tomorrow';
   }
 }
