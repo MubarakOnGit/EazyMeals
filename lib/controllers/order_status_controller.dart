@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 class OrderController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  RxString todayOrderStatus = 'Pending Delivery'.obs; // Default status
+  RxString todayOrderStatus = 'Pending Delivery'.obs;
   RxBool isTodayOrderDelivered = false.obs;
 
   void updateOrderStatus(String status) {

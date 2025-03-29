@@ -172,7 +172,10 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                   ),
                 ),
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Logout'),
+                child: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -570,7 +573,7 @@ class _ProfileScreenState extends BaseState<ProfileScreen> {
                               ProfileCard(
                                 icon: Icons.admin_panel_settings,
                                 title: 'Employee Login',
-                                subtitle: 'Access admin features',
+                                subtitle: 'Access employee features',
                                 onTap: () => _navigateToEmployeeLogin(context),
                               ),
                               ProfileCard(

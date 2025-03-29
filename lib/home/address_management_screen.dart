@@ -305,8 +305,8 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
         'https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&accept-language=en';
     try {
       final response = await http.get(
-        Uri.parse('$url&lat=$lat&lon=$lng'),
-        headers: {'User-Agent': 'AddressManager/1.0'},
+            Uri.parse('$url&lat=$lat&lon=$lng'),
+            headers: {'User-Agent': 'AddressManager/1.0'},
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -347,7 +347,7 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
     }
 
     final result = await Navigator.push(
-      context,
+        context,
       MaterialPageRoute(
         builder:
             (context) =>
@@ -409,7 +409,7 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
                 ),
                 child: Row(
                   children: [
-                    IconButton(
+          IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -433,7 +433,7 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
+        children: [
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
@@ -498,7 +498,7 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
               ),
               Expanded(
                 child:
-                    _isLoading
+          _isLoading
                         ? const Center(
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -506,22 +506,22 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
                             ),
                           ),
                         )
-                        : GoogleMap(
+              : GoogleMap(
                           onMapCreated:
                               (controller) => _mapController = controller,
-                          initialCameraPosition: CameraPosition(
-                            target: _currentLocation ?? const LatLng(0, 0),
-                            zoom: 15,
-                          ),
-                          myLocationEnabled: true,
-                          myLocationButtonEnabled: true,
-                          onTap: _onMapTapped,
-                          markers:
-                              _pinnedLocation != null
-                                  ? {
-                                    Marker(
-                                      markerId: const MarkerId('pinned'),
-                                      position: _pinnedLocation!,
+                initialCameraPosition: CameraPosition(
+                  target: _currentLocation ?? const LatLng(0, 0),
+                  zoom: 15,
+                ),
+                myLocationEnabled: true,
+                myLocationButtonEnabled: true,
+                onTap: _onMapTapped,
+                markers:
+                    _pinnedLocation != null
+                        ? {
+                          Marker(
+                            markerId: const MarkerId('pinned'),
+                            position: _pinnedLocation!,
                                       icon:
                                           BitmapDescriptor.defaultMarkerWithHue(
                                             BitmapDescriptor.hueBlue,
@@ -534,9 +534,9 @@ class _CustomMapScreenState extends State<CustomMapScreen> {
                                                         .address,
                                               )
                                               : const InfoWindow(),
-                                    ),
-                                  }
-                                  : {},
+                          ),
+                        }
+                        : {},
                           circles:
                               _pinnedLocation != null
                                   ? {
@@ -643,7 +643,7 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
   }
 
   void _checkFields() {
-    setState(() {
+        setState(() {
       _isSaveEnabled =
           _buildingController.text.trim().isNotEmpty &&
           _floorController.text.trim().isNotEmpty &&
@@ -736,8 +736,8 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
                     ),
                     const Expanded(
                       child: Text(
-                        'Add New Address',
-                        style: TextStyle(
+              'Add New Address',
+              style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -773,9 +773,9 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue[900],
-                        ),
-                      ),
+                color: Colors.blue[900],
+              ),
+            ),
                       const SizedBox(height: 8),
                       Text(
                         widget.location.address,
@@ -789,9 +789,9 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                children: [
                     Text(
                       'Address Type',
                       style: TextStyle(
@@ -811,10 +811,10 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
                           _buildTypeOption('Other', Icons.label),
                         ],
                       ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
               if (_selectedType == 'other')
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -940,11 +940,11 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
                 padding: const EdgeInsets.all(16),
                 child: ElevatedButton(
                   onPressed: _isSaveEnabled ? _saveAddress : null,
-                  style: ElevatedButton.styleFrom(
+                style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.blue[900],
+                  backgroundColor: Colors.blue[900],
                     disabledBackgroundColor: Colors.grey[400],
-                    shape: RoundedRectangleBorder(
+                  shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 6,
@@ -1124,14 +1124,14 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
               .collection('addresses')
               .get();
 
-      setState(() {
+        setState(() {
         _addresses =
             snapshot.docs
                 .map((doc) => EnhancedLocationDetails.fromMap(doc.data()))
                 .toList();
         _isLoading = false;
       });
-    } catch (e) {
+      } catch (e) {
       print('Error loading addresses: $e');
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(
@@ -1243,16 +1243,16 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
       ),
       builder:
           (context) => Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
+                      children: [
+                        Text(
                   'Type: ${address.addressType}',
-                  style: TextStyle(
+                          style: TextStyle(
                     fontSize: 16,
-                    color: Colors.blue[900],
+                            color: Colors.blue[900],
                     height: 1.5,
                   ),
                 ),
@@ -1276,7 +1276,7 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                   'Floor: ${address.floorNumber}',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.blue[900],
+                          color: Colors.blue[900],
                     height: 1.5,
                   ),
                 ),
@@ -1303,11 +1303,11 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                       fontSize: 16,
                       color: Colors.blue[900],
                       height: 1.5,
-                    ),
-                  ),
-              ],
             ),
           ),
+        ],
+            ),
+      ),
     );
   }
 
@@ -1334,28 +1334,28 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
               slivers: [
                 SliverAppBar(
                   expandedHeight: 200,
-                  floating: false,
-                  pinned: true,
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  leading: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
+      floating: false,
+      pinned: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
                           colors: [
                             Colors.blue[900]!.withAlpha(230),
                             Colors.blue[700]!.withAlpha(179),
                           ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                        borderRadius: const BorderRadius.vertical(
-                          bottom: Radius.circular(30),
-                        ),
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(30),
+            ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withAlpha(51),
@@ -1363,84 +1363,84 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                             offset: const Offset(0, 4),
                           ),
                         ],
-                      ),
-                      child: const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Manage Addresses',
-                              style: TextStyle(
-                                fontSize: 28,
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Manage Addresses',
+                  style: TextStyle(
+                    fontSize: 28,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                    color: Colors.white,
                                 letterSpacing: 1,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Your delivery locations',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white70,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                              'Your delivery locations',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Add New Address',
-                          style: TextStyle(
-                            fontSize: 22,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Add New Address',
+            style: TextStyle(
+              fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: Colors.blue[900],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+              color: Colors.blue[900],
+            ),
+          ),
+          const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _addAddressFromMap,
-                          style: ElevatedButton.styleFrom(
+                  style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               vertical: 16,
                               horizontal: 32,
                             ),
-                            backgroundColor: Colors.blue[900],
-                            shape: RoundedRectangleBorder(
+                    backgroundColor: Colors.blue[900],
+                    shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
-                            ),
+                    ),
                             elevation: 6,
                             shadowColor: Colors.blue.withAlpha(102),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                               Icon(
                                 Icons.add_location,
                                 color: Colors.white,
                                 size: 20,
                               ),
-                              SizedBox(width: 8),
-                              Text(
+                      SizedBox(width: 8),
+                      Text(
                                 'Add Address',
-                                style: TextStyle(
-                                  fontSize: 16,
+                        style: TextStyle(
+                          fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
+                          color: Colors.white,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
                         const SizedBox(height: 24),
                         Text(
                           'Your Addresses',
@@ -1467,17 +1467,17 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                     ? SliverToBoxAdapter(
                       child: Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                             Icon(
                               Icons.location_off,
                               size: 60,
                               color: Colors.grey[400],
                             ),
                             const SizedBox(height: 16),
-                            Text(
+                      Text(
                               'No addresses yet',
-                              style: TextStyle(
+                        style: TextStyle(
                                 fontSize: 18,
                                 color: Colors.grey[600],
                               ),
@@ -1488,11 +1488,11 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
                         ),
                       ),
+                    ],
+                  ),
+                ),
                     )
                     : SliverList(
                       delegate: SliverChildBuilderDelegate(
@@ -1523,41 +1523,41 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
     return GestureDetector(
       onTap: () => _showFullAddress(context, address),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 300),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors:
-                isActive
-                    ? [Colors.blue[900]!, Colors.blue[700]!]
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors:
+              isActive
+                  ? [Colors.blue[900]!, Colors.blue[700]!]
                     : [Colors.white, Colors.grey[100]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
               color:
                   isActive
                       ? Colors.blue.withOpacity(0.3)
                       : Colors.grey.withOpacity(0.2),
               blurRadius: 12,
               offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
+          ),
+        ],
+      ),
+      child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
+        children: [
+          Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color:
-                    isActive
+            decoration: BoxDecoration(
+              color:
+                  isActive
                         ? Colors.white.withOpacity(0.2)
                         : Colors.blue[900]!.withOpacity(0.1),
-                shape: BoxShape.circle,
+              shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -1565,34 +1565,34 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                     offset: const Offset(0, 2),
                   ),
                 ],
-              ),
-              child: Icon(
-                typeIcon,
-                color: isActive ? Colors.white : Colors.blue[900],
-                size: 24,
-              ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            child: Icon(
+                typeIcon,
+              color: isActive ? Colors.white : Colors.blue[900],
+                size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
+              children: [
+                Text(
                     address.addressType,
-                    style: TextStyle(
+                  style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: isActive ? Colors.white : Colors.blue[900],
+                    color: isActive ? Colors.white : Colors.blue[900],
                       height: 1.4,
-                    ),
+                  ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                  ),
+                ),
                   const SizedBox(height: 6),
-                  Text(
+                Text(
                     '${address.buildingName} • Floor ${address.floorNumber} • Door ${address.doorNumber}',
-                    style: TextStyle(
+                  style: TextStyle(
                       fontSize: 14,
                       color:
                           isActive
@@ -1616,37 +1616,37 @@ class _AddressManagementScreenState extends State<AddressManagementScreen> {
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.delete,
-                    color: isActive ? Colors.redAccent : Colors.red[400],
-                    size: 24,
-                  ),
-                  onPressed: () => _deleteAddress(index),
-                  padding: const EdgeInsets.all(8),
-                ),
-                IconButton(
-                  icon: Icon(
-                    isActive
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: isActive ? Colors.greenAccent : Colors.grey[600],
-                    size: 24,
-                  ),
-                  onPressed: () => _setActiveAddress(address),
-                  padding: const EdgeInsets.all(8),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.delete,
+                  color: isActive ? Colors.redAccent : Colors.red[400],
+                    size: 24,
+                ),
+                onPressed: () => _deleteAddress(index),
+                  padding: const EdgeInsets.all(8),
+              ),
+              IconButton(
+                icon: Icon(
+                    isActive
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                  color: isActive ? Colors.greenAccent : Colors.grey[600],
+                    size: 24,
+                ),
+                onPressed: () => _setActiveAddress(address),
+                  padding: const EdgeInsets.all(8),
+              ),
+            ],
+          ),
+        ],
+      ),
       ),
     );
   }

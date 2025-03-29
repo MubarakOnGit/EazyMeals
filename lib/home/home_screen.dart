@@ -32,9 +32,9 @@ class _HomeScreenState extends BaseState<HomeScreen> {
   String greeting = 'Good Morning';
   List<Map<String, dynamic>> allItems = [];
   List<Map<String, dynamic>> filteredItems = [];
-  String todayOrderStatus = 'No Order';
   EnhancedLocationDetails? _activeEnhancedAddress;
   bool _isStudentVerified = false;
+  StreamSubscription<QuerySnapshot>? _orderSubscription;
 
   @override
   void initState() {
@@ -45,6 +45,90 @@ class _HomeScreenState extends BaseState<HomeScreen> {
     _loadUserName();
     _loadActiveAddress();
     _initializeItems();
+    _setupOrderListener();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _orderSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupOrderListener() {
+    final user = currentUser;
+    if (user != null) {
+      print('Setting up order listener for user: ${user.uid}');
+      // Get today’s date range
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day, 0, 0);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      // Fetch subscriptionId from user data
+      firestore
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .then((doc) {
+            if (doc.exists) {
+              final userData = doc.data() ?? {};
+              final subscriptionId =
+                  userData['subscriptionId'] as String? ?? '';
+              print('Subscription ID: $subscriptionId');
+
+              _orderSubscription = firestore
+                  .collection('orders')
+                  .where('userId', isEqualTo: user.uid)
+                  .where('subscriptionId', isEqualTo: subscriptionId)
+                  .where(
+                    'date',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
+                  )
+                  .where(
+                    'date',
+                    isLessThanOrEqualTo: Timestamp.fromDate(todayEnd),
+                  )
+                  .snapshots()
+                  .listen(
+                    onOrderUpdate,
+                    onError: (e) => print('Order listener error: $e'),
+                  );
+            } else {
+              print('User document not found');
+              orderController.updateOrderStatus('No Order');
+            }
+          })
+          .catchError((e) {
+            print('Error fetching user data: $e');
+            orderController.updateOrderStatus('No Order');
+          });
+    } else {
+      print('No user logged in, cannot setup order listener');
+      orderController.updateOrderStatus('No Order');
+    }
+  }
+
+  @override
+  void onOrderUpdate(QuerySnapshot snapshot) {
+    print('Order snapshot received: ${snapshot.docs.length} docs');
+    if (snapshot.docs.isNotEmpty) {
+      bool allDelivered = true;
+      for (var doc in snapshot.docs) {
+        final order = doc.data() as Map<String, dynamic>;
+        final status = order['status'] ?? 'Pending Delivery';
+        print('Order ID: ${doc.id}, Status: $status');
+        if (status != 'Delivered') {
+          allDelivered = false;
+          break;
+        }
+      }
+      final newStatus = allDelivered ? 'Delivered' : 'Pending Delivery';
+      print('Updating order status to: $newStatus');
+      orderController.updateOrderStatus(newStatus);
+    } else {
+      print('No orders found for today');
+      orderController.updateOrderStatus('No Order');
+    }
   }
 
   @override
@@ -85,7 +169,7 @@ class _HomeScreenState extends BaseState<HomeScreen> {
         if (doc.exists && mounted) {
           final data = doc.data() ?? {};
           setState(() {
-            userName = data['name'] ?? 'User';
+            userName = data['name'] is String ? data['name'] : 'User';
           });
         }
       } catch (e) {
@@ -112,17 +196,6 @@ class _HomeScreenState extends BaseState<HomeScreen> {
       } catch (e) {
         print('Error loading active address: $e');
       }
-    }
-  }
-
-  @override
-  void onOrderUpdate(QuerySnapshot snapshot) {
-    if (snapshot.docs.isNotEmpty) {
-      final order = snapshot.docs.first.data() as Map<String, dynamic>;
-      final status = order['status'] ?? 'Pending Delivery';
-      orderController.updateOrderStatus(status);
-    } else {
-      orderController.updateOrderStatus('No Order');
     }
   }
 
@@ -202,7 +275,7 @@ class _HomeScreenState extends BaseState<HomeScreen> {
     }
     final now = DateTime.now();
     if (now.hour < 9 || now.hour >= 22) {
-      return; // Prevent toggling between 10 PM - 9 AM
+      return;
     }
 
     await pausePlayController.togglePausePlay(subscribed);
@@ -259,12 +332,6 @@ class _HomeScreenState extends BaseState<HomeScreen> {
       },
     ];
     filteredItems = List.from(allItems);
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   @override
@@ -505,16 +572,14 @@ class _HomeScreenState extends BaseState<HomeScreen> {
         final now = DateTime.now();
         final isOutsideHours = now.hour < 9 || now.hour >= 22;
         if (isOutsideHours) {
-          // Static widget during 10 PM - 9 AM
           return Switch(
-            value: pausePlayController.isPaused.value, // Last known state
-            onChanged: null, // Disabled
+            value: pausePlayController.isPaused.value,
+            onChanged: null,
             activeColor: Colors.white.withOpacity(0.9),
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.white.withOpacity(0.2),
           );
         } else {
-          // Reactive widget outside 10 PM - 9 AM
           return Obx(
             () => Switch(
               value: pausePlayController.isPaused.value,
@@ -682,7 +747,6 @@ class _HomeScreenState extends BaseState<HomeScreen> {
         final now = DateTime.now();
         final isOutsideHours = now.hour < 9 || now.hour >= 22;
         if (isOutsideHours) {
-          // Static text during 10 PM - 9 AM
           return const Text(
             'Cannot switch between 10pm - 9am',
             style: TextStyle(
@@ -694,7 +758,6 @@ class _HomeScreenState extends BaseState<HomeScreen> {
             overflow: TextOverflow.ellipsis,
           );
         } else {
-          // Reactive text outside 10 PM - 9 AM
           return Obx(
             () => Text(
               pausePlayController.isPaused.value ? 'Paused' : 'Active',
