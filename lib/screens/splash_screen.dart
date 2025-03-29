@@ -123,6 +123,9 @@ class _SplashScreenState extends State<SplashScreen>
     await _checkMenuFile();
 
     final user = FirebaseAuth.instance.currentUser;
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
     if (user != null) {
       await user.reload();
       if (user.emailVerified) {
@@ -136,7 +139,11 @@ class _SplashScreenState extends State<SplashScreen>
       }
     } else {
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/onboarding');
+        if (!hasSeenOnboarding) {
+          Navigator.pushReplacementNamed(context, '/onboarding');
+        } else {
+          Navigator.pushReplacementNamed(context, '/login');
+        }
       }
     }
   }

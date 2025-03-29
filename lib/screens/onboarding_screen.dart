@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Placeholder theme values (replace with actual imports from ../utils/theme.dart)
 const Color backgroundColor = Colors.white;
@@ -74,13 +75,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     });
   }
 
-  void _nextPage() {
+  void _nextPage() async {
     if (_currentPage < onboardingData.length - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
       );
     } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('has_seen_onboarding', true);
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
       }
